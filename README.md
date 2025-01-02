@@ -1,36 +1,122 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Gas Fee Delegation Server for Transactions
 
-## Getting Started
+This repository contains a server implementation for gas fee delegation using Prisma and Node.js. Follow the steps below to set up and run the server.
 
-First, run the development server:
+---
+
+## Prerequisites
+
+Ensure you have the following installed on your system:
+
+- **Node.js** (version 22)
+- **npm** (comes with Node.js)
+- **SQLite** (or any database supported by Prisma)
+
+---
+
+## Step-by-Step Setup
+
+### 1. Install Dependencies
+
+Run the following command to install the required Node.js packages:
+
+```bash
+npm install
+```
+
+---
+
+### 2. Configure Environment Variables
+
+Create a `.env.local` file in the root directory: you can use a template.env file
+
+---
+
+### 4. Prisma Setup
+
+#### a. Initialize Prisma
+
+Run the following command to initialize Prisma and create the SQLite database:
+
+```bash
+npx prisma migrate dev --name init
+```
+
+#### b. Generate Prisma Client
+
+Generate the Prisma client with the command:
+
+```bash
+npx prisma generate
+```
+
+---
+
+### 5. Start the Server
+
+Run the server in development mode:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The server will start at `http://localhost:3000`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## API Endpoints
 
-## Learn More
+### **`POST /api/signAsFeePayer`**
 
-To learn more about Next.js, take a look at the following resources:
+#### Request
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Your contract address should be registered via management UI
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- **Header:**
+  ````json
+  {
+    "Content-Type": "application/json",
+  }
+  ```
+  ````
+- **Body:**
+  ```json
+  {
+    "userSignedTx": "<your-rlp-encoded-signed-transaction>"
+  }
+  ```
 
-## Deploy on Vercel
+#### Response
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- **Success:**
+  ```json
+  {
+    "message": "Request was successful",
+    "data": {
+      /* transaction receipt details */
+    }
+  }
+  ```
+- **Error:**
+  ```json
+  {
+    "message": "Error details",
+    "data": "message"
+  }
+  ```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+---
+
+## Contributing
+
+Contributions are welcome! Feel free to submit a pull request or open an issue for discussion.
+
+---
+
+## License
+
+This project is licensed under the MIT License.
+
+```
+
+```
