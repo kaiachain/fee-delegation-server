@@ -78,7 +78,7 @@ Your contract address should be registered via management UI
     "Content-Type": "application/json",
   }
   ```
-  ````
+
 - **Body:**
   ```json
   {
