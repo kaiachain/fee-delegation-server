@@ -73,7 +73,7 @@ The server will start at `http://localhost:3000`.
 Your contract address should be registered via management UI
 
 - **Header:**
-  ````json
+  ```json
   {
     "Content-Type": "application/json",
   }
