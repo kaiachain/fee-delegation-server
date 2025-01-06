@@ -22,19 +22,21 @@ export async function POST(req: NextRequest) {
     const userSignedTxRlp = userSignedTx.raw;
     const tx = parseTransaction(userSignedTxRlp);
 
-    const targetContract = tx.to?.toLowerCase();
-    console.log(targetContract);
-    if (await isWhitelisted(targetContract as string)) {
-      return createResponse("BAD_REQUEST", "Contract is not whitelisted");
-    }
-
-    // balance check
-    const dapp = await getDappfromContract(targetContract as string);
-    if (!dapp) {
-      return createResponse("BAD_REQUEST", "Contract not found");
-    }
-    if (!isEnoughBalance(BigInt(dapp.balance))) {
-      return createResponse("BAD_REQUEST", "Insufficient balance");
+    // if it's testnet, allow all transactions
+    let dapp;
+    if (process.env.NETWORK === "mainnet") {
+      const targetContract = tx.to?.toLowerCase();
+      if (await isWhitelisted(targetContract as string)) {
+        return createResponse("BAD_REQUEST", "Contract is not whitelisted");
+      }
+      // balance check
+      dapp = await getDappfromContract(targetContract as string);
+      if (!dapp) {
+        return createResponse("BAD_REQUEST", "Contract not found");
+      }
+      if (!isEnoughBalance(BigInt(dapp.balance))) {
+        return createResponse("BAD_REQUEST", "Insufficient balance");
+      }
     }
 
     const feePayer = new Wallet(
@@ -46,10 +48,11 @@ export async function POST(req: NextRequest) {
     const receipt = await txHash.wait();
 
     // update balance, totalUsed
-    console.log(receipt);
-    if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
-      const usedFee = receipt?.gasUsed * BigInt(receipt?.gasPrice);
-      await updateDappWithFee(dapp, usedFee);
+    if (process.env.NETWORK === "mainnet" && dapp) {
+      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
+        const usedFee = receipt?.gasUsed * BigInt(receipt?.gasPrice);
+        await updateDappWithFee(dapp, usedFee);
+      }
     }
 
     if (receipt?.status !== 1) {
