@@ -37,7 +37,7 @@ export default function NavBar() {
         <div className="relative flex items-center justify-between h-16">
           <div className="flex flex-row items-center justify-center sm:items-stretch sm:justify-start">
             <div className="flex-shrink-0 flex items-center">
-              <Link href="/lank">
+              <Link href="rank">
                 <span className="text-white text-2xl font-extrabold">
                   Gas Fee Delegation | kaia
                 </span>
@@ -48,9 +48,9 @@ export default function NavBar() {
             <div className="flex flex-row justify-evenly">
               <Link
                 className="text-gray-300 hover:bg-gray-700 hover:text-white px-5 py-2 rounded-md text-sm font-medium"
-                href="/lank"
+                href="/rank"
               >
-                Lank
+                Rank
               </Link>
               <Link
                 className="text-gray-300 hover:bg-gray-700 hover:text-white px-5 py-2 rounded-md text-sm font-medium"
