@@ -6,7 +6,7 @@ on:
       - feat/add-dockerfile-and-CI
 
 jobs:
-  deploy:
+  build-and-push-image-to-ECR:
     permissions:
       id-token: write
       contents: read
@@ -36,7 +36,10 @@ jobs:
             ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
             ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY_KAIROS }}
             IMAGE_TAG: ${{ steps.vars.outputs.hash }}
+            API_URL: ${{ vars.KAIROS_API_URL }}
         run: |
+            echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
+            cat .env.production
             docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
             docker push $ECR_REGISTRY/$ECR_REPOSITORY -a
 
