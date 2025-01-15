@@ -27,26 +27,26 @@ export async function POST(req: NextRequest) {
     }
 
     if (
-      await prisma.contract.findFirst({
+      await prisma.sender.findFirst({
         where: {
           address,
         },
       })
     ) {
-      return createResponse("BAD_REQUEST", "Contract already exists");
+      return createResponse("BAD_REQUEST", "Sender already exists");
     }
 
-    const newContract = await prisma.contract.create({
+    const newSender = await prisma.sender.create({
       data: {
         address: address.toLowerCase(),
         dappId,
       },
     });
 
-    return createResponse("SUCCESS", newContract);
+    return createResponse("SUCCESS", newSender);
   } catch (error) {
-    console.error("Error adding contract:", error);
-    return createResponse("INTERNAL_ERROR", "Failed to add contract");
+    console.error("Error adding sender:", error);
+    return createResponse("INTERNAL_ERROR", "Failed to add sender");
   }
 }
 
@@ -62,18 +62,28 @@ export async function DELETE(req: NextRequest) {
     const { id } = await req.json();
 
     if (!id) {
-      return createResponse("BAD_REQUEST", "Missing required fields: id");
+      return createResponse("BAD_REQUEST", "Missing required field: id");
     }
 
-    const contract = await prisma.contract.delete({
+    const sender = await prisma.sender.findFirst({
       where: {
         id,
       },
     });
 
-    return createResponse("SUCCESS", contract);
+    if (!sender) {
+      return createResponse("BAD_REQUEST", "Sender not found");
+    }
+
+    await prisma.sender.delete({
+      where: {
+        id,
+      },
+    });
+
+    return createResponse("SUCCESS", sender);
   } catch (error) {
-    console.error("Error removing contract:", error);
-    return createResponse("INTERNAL_ERROR", "Failed to remove contract");
+    console.error("Error deleting sender:", error);
+    return createResponse("INTERNAL_ERROR", "Failed to delete sender");
   }
 }

@@ -16,10 +16,18 @@ model DApp {
   createdAt DateTime @default(now())
 
   contracts Contract[]
+  senders   Sender[]
 }
 
 model Contract {
   id        String  @id @default(cuid())
+  address   String  @unique
+  dappId    String
+  dapp      DApp    @relation(fields: [dappId], references: [id], onDelete: Cascade)
+}
+
+model Sender {
+  id        String @id @default(cuid())
   address   String  @unique
   dappId    String
   dapp      DApp    @relation(fields: [dappId], references: [id], onDelete: Cascade)

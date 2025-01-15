@@ -1,14 +1,9 @@
 import { NextRequest } from "next/server";
-import {
-  Wallet,
-  parseTransaction,
-  JsonRpcProvider,
-} from "@kaiachain/ethers-ext/v6";
+import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
 import { prisma } from "@/lib/prisma";
 import { DApp } from "@prisma/client";
-
-const provider = new JsonRpcProvider(process.env.RPC_URL as string);
+import pickProviderFromPool from "@/lib/rpcProvider";
 
 export async function POST(req: NextRequest) {
   try {
@@ -25,20 +20,30 @@ export async function POST(req: NextRequest) {
     // if it's testnet, allow all transactions
     let dapp;
     if (process.env.NETWORK === "mainnet") {
-      const targetContract = tx.to?.toLowerCase();
-      if (await isWhitelisted(targetContract as string)) {
+      const targetContract = tx.to?.toLowerCase() as string;
+      const sender = tx.from?.toLowerCase() as string;
+      if (
+        !(
+          (await isWhitelistedContract(targetContract)) ||
+          (await isWhitelistedSender(sender))
+        )
+      ) {
         return createResponse("BAD_REQUEST", "Contract is not whitelisted");
       }
       // balance check
       dapp = await getDappfromContract(targetContract as string);
       if (!dapp) {
-        return createResponse("BAD_REQUEST", "Contract not found");
+        dapp = await getDappfromSender(sender as string);
+        if (!dapp) {
+          return createResponse("BAD_REQUEST", "Contract not found");
+        }
       }
       if (!isEnoughBalance(BigInt(dapp.balance))) {
         return createResponse("BAD_REQUEST", "Insufficient balance");
       }
     }
 
+    const provider = pickProviderFromPool();
     const feePayer = new Wallet(
       process.env.FEE_PAYER_PRIVATE_KEY as string,
       provider
@@ -56,20 +61,30 @@ export async function POST(req: NextRequest) {
     }
 
     if (receipt?.status !== 1) {
-      return createResponse("BAD_REQUEST", "Transaction failed");
+      return createResponse("BAD_REQUEST", receipt);
     }
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     console.log(JSON.stringify(error));
-    return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
+    const msg = JSON.parse(JSON.stringify(error))?.error?.message || "";
+    if (msg === "")
+      return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
+    return createResponse("INTERNAL_ERROR", msg);
   }
 }
 
-const isWhitelisted = async (address: string) => {
+const isWhitelistedContract = async (address: string) => {
   const contract = await prisma.contract.findUnique({
     where: { address },
   });
   return contract ? false : true;
+};
+
+const isWhitelistedSender = async (address: string) => {
+  const sender = await prisma.sender.findUnique({
+    where: { address },
+  });
+  return sender ? false : true;
 };
 
 const getDappfromContract = async (address: string) => {
@@ -78,6 +93,16 @@ const getDappfromContract = async (address: string) => {
   });
   const dapp = await prisma.dApp.findUnique({
     where: { id: contract?.dappId },
+  });
+  return dapp;
+};
+
+const getDappfromSender = async (address: string) => {
+  const sender = await prisma.sender.findUnique({
+    where: { address },
+  });
+  const dapp = await prisma.dApp.findUnique({
+    where: { id: sender?.dappId },
   });
   return dapp;
 };

@@ -3,23 +3,14 @@ import { prisma } from "@/lib/prisma";
 import { ethers } from "ethers";
 import { createResponse, formattedBalance } from "@/lib/apiUtils";
 import { verify } from "@/lib/verifyToken";
-
-type Dapp = {
-  name?: string;
-  url?: string;
-  balance?: number;
-  contracts?: Contracts[];
-};
-
-type Contracts = {
-  address: string;
-};
+import { Dapp } from "@/types";
 
 export async function GET() {
   try {
     const dapps = await prisma.dApp.findMany({
       include: {
         contracts: true,
+        senders: true,
       },
     });
 
@@ -45,13 +36,16 @@ export async function POST(req: NextRequest) {
       return createResponse("INTERNAL_ERROR", "Unauthorized");
     }
 
-    const { name, url, balance, contracts } = await req.json();
+    const { name, url, balance, contracts, senders } = await req.json();
 
     const data: any = {
       name,
       url,
       contracts: {
         create: contracts,
+      },
+      senders: {
+        create: senders,
       },
     };
 
@@ -61,6 +55,7 @@ export async function POST(req: NextRequest) {
         url,
         balance,
         contracts,
+        senders,
       })
     ) {
       return createResponse("BAD_REQUEST", "Invalid dapp data");
@@ -75,7 +70,10 @@ export async function POST(req: NextRequest) {
       data,
     });
 
-    return NextResponse.json(dapp);
+    return NextResponse.json({
+      ...dapp,
+      balance: ethers.formatUnits(dapp.balance),
+    });
   } catch (error) {
     console.error("Error creating dapp:", JSON.stringify(error));
     return createResponse("INTERNAL_ERROR", "Failed to create dapp");
@@ -176,6 +174,13 @@ const verifyDapp = (dapp: Dapp) => {
     dapp.contracts &&
     dapp.contracts.length !== 0 &&
     !dapp.contracts.every((contract) => ethers.isAddress(contract.address))
+  ) {
+    return false;
+  }
+  if (
+    dapp.senders &&
+    dapp.senders.length !== 0 &&
+    !dapp.senders.every((sender) => ethers.isAddress(sender.address))
   ) {
     return false;
   }
