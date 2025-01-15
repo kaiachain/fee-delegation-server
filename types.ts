@@ -1,10 +1,20 @@
-export interface Dapp {
-  name: string;
-  url: string;
-  balance: number;
-  contracts: Contract[];
+export interface Contract {
+  id?: string;
+  address: string;
 }
 
-export interface Contract {
+export interface Sender {
+  id?: string;
   address: string;
+}
+
+export interface Dapp {
+  id?: string;
+  name?: string;
+  url?: string;
+  totalUsed?: number;
+  balance?: number;
+  createdAt?: string;
+  contracts?: Contract[];
+  senders?: Sender[];
 }

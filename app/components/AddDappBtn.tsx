@@ -1,16 +1,6 @@
 import React, { useState } from "react";
 import AddDappModal from "./AddDappModal";
-
-interface Contract {
-  address: string;
-}
-
-interface Dapp {
-  name: string;
-  url: string;
-  balance: number;
-  contracts: Contract[];
-}
+import { Dapp } from "@/types";
 
 interface AddDappBtnProps {
   onDappAdd: (dapp: Dapp) => void;

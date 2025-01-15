@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { useSession } from "next-auth/react";
 import { Session } from "next-auth";
 import { ethers } from "ethers";
 

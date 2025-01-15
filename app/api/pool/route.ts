@@ -1,10 +1,8 @@
 import { createResponse } from "@/lib/apiUtils";
 import { verify } from "@/lib/verifyToken";
-import { JsonRpcProvider } from "@kaiachain/ethers-ext/v6";
 import { NextRequest } from "next/server";
 import { formattedBalance } from "@/lib/apiUtils";
-
-const provider = new JsonRpcProvider(process.env.RPC_URL as string);
+import pickProviderFromPool from "@/lib/rpcProvider";
 
 export async function GET(req: NextRequest) {
   try {
@@ -15,7 +13,7 @@ export async function GET(req: NextRequest) {
       return createResponse("INTERNAL_ERROR", "Unauthorized");
     }
 
-    const balance = await provider.getBalance(
+    const balance = await pickProviderFromPool().getBalance(
       process.env.ACCOUNT_ADDRESS as string,
       "latest"
     );

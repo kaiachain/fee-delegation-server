@@ -3,9 +3,9 @@
 import { ethers } from "ethers";
 import fetchData from "@/lib/apiUtils";
 import { useSession } from "next-auth/react";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import Modal from "react-modal";
-import { Contract, Dapp } from "@/types";
+import { Contract, Dapp, Sender } from "@/types";
 
 interface AddDappModalProps {
   isModalOpen: boolean;
@@ -18,12 +18,30 @@ export default function AddDappModal({
   setIsModalOpen,
   onDappAdd,
 }: AddDappModalProps) {
+  const cInputRef = useRef<HTMLInputElement>(null);
+  const cAddButtonRef = useRef<HTMLButtonElement>(null);
+  const sInputRef = useRef<HTMLInputElement>(null);
+  const sAddButtonRef = useRef<HTMLButtonElement>(null);
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [balance, setBalance] = useState<number>(0);
   const [contractAddress, setContractAddress] = useState("");
   const [contracts, setContracts] = useState<Contract[]>([]);
+  const [senderAddress, setSenderAddress] = useState("");
+  const [senders, setSenders] = useState<Sender[]>([]);
   const { data: session } = useSession();
+
+  const handleCAddKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      cAddButtonRef.current?.click();
+    }
+  };
+
+  const handleSAddKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Enter") {
+      sAddButtonRef.current?.click();
+    }
+  };
 
   const handleAddContract = () => {
     if (contractAddress.trim() && ethers.isAddress(contractAddress)) {
@@ -34,6 +52,15 @@ export default function AddDappModal({
     }
   };
 
+  const handleAddSender = () => {
+    if (senderAddress.trim() && ethers.isAddress(senderAddress)) {
+      setSenders([...senders, { address: senderAddress }]);
+      setSenderAddress("");
+    } else {
+      alert("Please enter a valid sender address.");
+    }
+  };
+
   const handleAddDapp = async () => {
     if (name.trim() && url.trim() && balance >= 0) {
       const newDapp: Dapp = {
@@ -41,6 +68,7 @@ export default function AddDappModal({
         url,
         balance,
         contracts,
+        senders,
       };
       // Add new dapp to the database
       const result = await fetchData(
@@ -56,7 +84,11 @@ export default function AddDappModal({
         return;
       }
       delete result.status;
-      onDappAdd({ ...result, contracts: newDapp.contracts });
+      onDappAdd({
+        ...result,
+        contracts: newDapp.contracts,
+        senders: newDapp.senders,
+      });
       setIsModalOpen(false);
       resetForm();
     } else {
@@ -151,15 +183,66 @@ export default function AddDappModal({
           ))}
           <div className="flex flex-row items-center gap-2 mb-6">
             <input
+              ref={cInputRef}
               type="text"
               placeholder="Enter contract address"
               className="border border-gray-300 p-2 w-full"
               id="contracts"
               value={contractAddress}
+              onKeyDown={handleCAddKeyPress}
               onChange={(e) => setContractAddress(e.target.value)}
             />
             <button
+              ref={cAddButtonRef}
               onClick={handleAddContract}
+              className="flex items-center justify-center bg-slate-400 text-white px-1.5 py-0.5 h-6 rounded-full opacity-80 hover:opacity-100 text-xl"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div className="flex flex-col">
+          <label className="mb-1" htmlFor="senders">
+            Senders
+          </label>
+          {senders.map((sender) => (
+            <div
+              key={sender.address}
+              className="flex flex-row items-center gap-2 mb-1"
+            >
+              <input
+                type="text"
+                placeholder="Enter sender address"
+                className="bg-gray-100 p-2 w-full"
+                value={sender.address}
+                readOnly
+              />
+              <button
+                onClick={() =>
+                  setSenders(
+                    senders.filter((c) => c.address !== sender.address)
+                  )
+                }
+                className="flex items-center justify-center bg-slate-400 text-white px-2 pb-0.5 h-6 rounded-full opacity-30 hover:opacity-90 text-2xl"
+              >
+                -
+              </button>
+            </div>
+          ))}
+          <div className="flex flex-row items-center gap-2 mb-6">
+            <input
+              type="text"
+              placeholder="Enter sender address"
+              className="border border-gray-300 p-2 w-full"
+              id="senders"
+              value={senderAddress}
+              ref={sInputRef}
+              onKeyDown={handleSAddKeyPress}
+              onChange={(e) => setSenderAddress(e.target.value)}
+            />
+            <button
+              onClick={handleAddSender}
+              ref={sAddButtonRef}
               className="flex items-center justify-center bg-slate-400 text-white px-1.5 py-0.5 h-6 rounded-full opacity-80 hover:opacity-100 text-xl"
             >
               +

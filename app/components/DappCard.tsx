@@ -1,24 +1,9 @@
 import { ethers } from "ethers";
 import React, { useState } from "react";
-import Modal from "react-modal";
 import EditModal from "./EditModal";
 import { useSession } from "next-auth/react";
 import fetchData from "@/lib/apiUtils";
-
-interface Contract {
-  id: string;
-  address: string;
-}
-
-interface Dapp {
-  id: string;
-  name: string;
-  url: string;
-  totalUsed: number;
-  balance: number;
-  createdAt: string;
-  contracts: Contract[];
-}
+import { Contract, Dapp } from "@/types";
 
 interface DappCardProps {
   dapp: Dapp;
@@ -28,6 +13,7 @@ interface DappCardProps {
 export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
   const [dappInfo, setDappInfo] = useState<any>(dapp);
   const [isContractEditModalOpen, setIsContractEditModalOpen] = useState(false);
+  const [isSenderEditModalOpen, setIsSenderEditModalOpen] = useState(false);
   const [isBalanceEditModalOpen, setIsBalanceEditModalOpen] = useState(false);
   const [isUrlEditModalOpen, setIsUrlEditModalOpen] = useState(false);
   const { data: session } = useSession();
@@ -61,9 +47,71 @@ export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
     setDappInfo(updatedDapp);
   };
 
+  const removeSender = async (sender: string) => {
+    const id = dappInfo.senders.find((s: any) => s.address === sender).id;
+    const result = await fetchData(
+      "/senders",
+      {
+        method: "DELETE",
+        body: { id },
+      },
+      session
+    );
+
+    if (!result.status) {
+      return;
+    }
+
+    const updatedSenders = dappInfo.senders.filter(
+      (s: any) => s.address !== sender
+    );
+    const updatedDapp = { ...dappInfo, senders: updatedSenders };
+    setDappInfo(updatedDapp);
+  };
+
+  const addSender = async (sender: string) => {
+    setIsSenderEditModalOpen(false);
+    if (!sender || !ethers.isAddress(sender)) return;
+    if (
+      dappInfo.senders.some(
+        (s: any) => s.address.toLowerCase() === sender.toLowerCase()
+      )
+    ) {
+      alert("Sender already exists");
+      return;
+    }
+
+    const result = await fetchData(
+      "/senders",
+      {
+        method: "POST",
+        body: { dappId: dappInfo.id, address: sender },
+      },
+      session
+    );
+
+    if (!result.status) {
+      return;
+    }
+
+    const addedSender = { id: result.data.id, address: result.data.address };
+    setDappInfo({
+      ...dappInfo,
+      senders: [...dappInfo.senders, addedSender],
+    });
+  };
+
   const addContract = async (contract: string) => {
     setIsContractEditModalOpen(false);
     if (!contract || !ethers.isAddress(contract)) return;
+    if (
+      dappInfo.contracts.some(
+        (c: any) => c.address.toLowerCase() === contract.toLowerCase()
+      )
+    ) {
+      alert("Contract already exists");
+      return;
+    }
 
     const result = await fetchData(
       "/contracts",
@@ -168,7 +216,9 @@ export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
         </p>
         <p className="font-bold">
           Created At:
-          <span className="font-thin ml-1">{convertTime(dapp.createdAt)}</span>
+          <span className="font-thin ml-1">
+            {convertTime(dapp.createdAt as string)}
+          </span>
         </p>
       </div>
       <h3 className="text-lg font-bold mt-4">Contracts</h3>
@@ -176,9 +226,9 @@ export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
         {dappInfo.contracts.map((contract: Contract) => (
           <li
             className="flex items-center justify-center p-2 bg-slate-400 rounded-lg relative group pr-10 font-mono"
-            key={contract.id}
+            key={contract.address}
           >
-            {contract.address}
+            {contract.address.toLowerCase()}
             <button
               className="absolute top-1/2 right-2 -translate-y-1/2 hidden group-hover:block bg-red-200 text-white text-xs px-1 py-0.5 h-5 w-5 rounded-full hover:bg-red-400"
               aria-label="Delete"
@@ -196,12 +246,44 @@ export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
           +
         </button>
       </ul>
+      <h3 className="text-lg font-bold mt-4">Senders</h3>
+      <ul className="flex flex-wrap items-center gap-2 mt-2">
+        {dappInfo.senders.map((sender: any) => (
+          <li
+            className="flex items-center justify-center p-2 bg-slate-400 rounded-lg relative group pr-10 font-mono"
+            key={sender.address}
+          >
+            {sender.address.toLowerCase()}
+            <button
+              className="absolute top-1/2 right-2 -translate-y-1/2 hidden group-hover:block bg-red-200 text-white text-xs px-1 py-0.5 h-5 w-5 rounded-full hover:bg-red-400"
+              aria-label="Delete"
+              onClick={() => removeSender(sender.address)}
+            >
+              x
+            </button>
+          </li>
+        ))}
+        <button
+          className="flex items-center justify-center h-3 w-3 bg-slate-400 text-xs rounded-full font-bold hover:bg-slate-50"
+          onClick={() => setIsSenderEditModalOpen(true)}
+        >
+          +
+        </button>
+      </ul>
       <EditModal
         title="Add Contract"
         isModalOpen={isContractEditModalOpen}
         setIsModalOpen={setIsContractEditModalOpen}
         submitData={addContract}
         placeholder="Enter contract address"
+        initialValue=""
+      />
+      <EditModal
+        title="Add Sender"
+        isModalOpen={isSenderEditModalOpen}
+        setIsModalOpen={setIsSenderEditModalOpen}
+        submitData={addSender}
+        placeholder="Enter sender address"
         initialValue=""
       />
       <EditModal
