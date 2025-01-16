@@ -28,7 +28,7 @@ model Contract {
 
 model Sender {
   id        String @id @default(cuid())
-  address   String  @unique
+  address   String @unique
   dappId    String
   dapp      DApp    @relation(fields: [dappId], references: [id], onDelete: Cascade)
 }

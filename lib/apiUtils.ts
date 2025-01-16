@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { Session } from "next-auth";
 import { ethers } from "ethers";
+import { prisma } from "@/lib/prisma";
+import { DApp } from "@prisma/client";
+import { parseKaia } from "@kaiachain/ethers-ext/v6";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
 
@@ -66,4 +69,55 @@ export const formattedBalance = (balance: string): string => {
   ).toFixed(5);
 };
 
-export default fetchData;
+export const isWhitelistedContract = async (address: string) => {
+  if (!address) {
+    return false;
+  }
+  const contract = await prisma.contract.findUnique({
+    where: { address },
+  });
+  return contract ? false : true;
+};
+
+export const isWhitelistedSender = async (address: string) => {
+  if (!address) {
+    return false;
+  }
+  const sender = await prisma.sender.findUnique({
+    where: { address },
+  });
+  return sender ? false : true;
+};
+
+export const getDappfromContract = async (address: string) => {
+  const contract = await prisma.contract.findUnique({
+    where: { address },
+  });
+  const dapp = await prisma.dApp.findUnique({
+    where: { id: contract?.dappId },
+  });
+  return dapp;
+};
+
+export const getDappfromSender = async (address: string) => {
+  const sender = await prisma.sender.findUnique({
+    where: { address },
+  });
+  const dapp = await prisma.dApp.findUnique({
+    where: { id: sender?.dappId },
+  });
+  return dapp;
+};
+
+export const isEnoughBalance = (balance: bigint) => {
+  return balance > parseKaia("0.1") ? true : false;
+};
+
+export const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
+  const balance = BigInt(dapp?.balance) - fee;
+  const totalUsed = BigInt(dapp?.totalUsed) + fee;
+  await prisma.dApp.update({
+    where: { id: dapp.id },
+    data: { balance: balance.toString(), totalUsed: totalUsed.toString() },
+  });
+};

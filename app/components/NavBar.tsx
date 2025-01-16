@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
-import fetchData from "@/lib/apiUtils";
+import { fetchData } from "@/lib/apiUtils";
 
 export default function NavBar() {
   const [isVisible, setIsVisible] = useState(false);

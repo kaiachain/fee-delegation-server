@@ -1,8 +1,14 @@
 import { NextRequest } from "next/server";
 import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
-import { prisma } from "@/lib/prisma";
-import { DApp } from "@prisma/client";
+import {
+  isWhitelistedContract,
+  isWhitelistedSender,
+  getDappfromContract,
+  getDappfromSender,
+  isEnoughBalance,
+  updateDappWithFee,
+} from "@/lib/apiUtils";
 import pickProviderFromPool from "@/lib/rpcProvider";
 
 export async function POST(req: NextRequest) {
@@ -31,14 +37,18 @@ export async function POST(req: NextRequest) {
         return createResponse("BAD_REQUEST", "Contract is not whitelisted");
       }
       // balance check
-      dapp = await getDappfromContract(targetContract as string);
-      if (!dapp) {
-        dapp = await getDappfromSender(sender as string);
-        if (!dapp) {
-          return createResponse("BAD_REQUEST", "Contract not found");
+      if (!targetContract) {
+        dapp = await getDappfromContract(targetContract as string);
+        console.log(1);
+        if (!dapp && !sender) {
+          dapp = await getDappfromSender(sender as string);
+          console.log(2);
+        } else {
+          return createResponse("BAD_REQUEST", "Address not found");
         }
       }
-      if (!isEnoughBalance(BigInt(dapp.balance))) {
+
+      if (dapp && !isEnoughBalance(BigInt(dapp.balance))) {
         return createResponse("BAD_REQUEST", "Insufficient balance");
       }
     }
@@ -72,50 +82,3 @@ export async function POST(req: NextRequest) {
     return createResponse("INTERNAL_ERROR", msg);
   }
 }
-
-const isWhitelistedContract = async (address: string) => {
-  const contract = await prisma.contract.findUnique({
-    where: { address },
-  });
-  return contract ? false : true;
-};
-
-const isWhitelistedSender = async (address: string) => {
-  const sender = await prisma.sender.findUnique({
-    where: { address },
-  });
-  return sender ? false : true;
-};
-
-const getDappfromContract = async (address: string) => {
-  const contract = await prisma.contract.findUnique({
-    where: { address },
-  });
-  const dapp = await prisma.dApp.findUnique({
-    where: { id: contract?.dappId },
-  });
-  return dapp;
-};
-
-const getDappfromSender = async (address: string) => {
-  const sender = await prisma.sender.findUnique({
-    where: { address },
-  });
-  const dapp = await prisma.dApp.findUnique({
-    where: { id: sender?.dappId },
-  });
-  return dapp;
-};
-
-const isEnoughBalance = (balance: bigint) => {
-  return balance > 0.1 ? true : false;
-};
-
-const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
-  const balance = BigInt(dapp?.balance) - fee;
-  const totalUsed = BigInt(dapp?.totalUsed) + fee;
-  await prisma.dApp.update({
-    where: { id: dapp.id },
-    data: { balance: balance.toString(), totalUsed: totalUsed.toString() },
-  });
-};
