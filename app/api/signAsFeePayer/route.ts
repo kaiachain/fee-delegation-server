@@ -1,9 +1,5 @@
 import { NextRequest } from "next/server";
-import {
-  Wallet,
-  parseTransaction,
-  KlaytnTxFactory,
-} from "@kaiachain/ethers-ext/v6";
+import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
 import {
   isWhitelistedContract,
