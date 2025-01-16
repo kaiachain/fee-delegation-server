@@ -13,5 +13,5 @@ WORKDIR /app
 COPY  package*.json .
 COPY --from=build /app/.next/ /app/.next/
 COPY --from=build /app/node_modules /app/node_modules 
-
+COPY --from=build /app/prisma /app/prisma
 CMD ["npm", "run", "start"]
