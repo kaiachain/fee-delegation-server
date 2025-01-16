@@ -1,5 +1,9 @@
 import { NextRequest } from "next/server";
-import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
+import {
+  Wallet,
+  parseTransaction,
+  KlaytnTxFactory,
+} from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
 import {
   isWhitelistedContract,
@@ -36,6 +40,8 @@ export async function POST(req: NextRequest) {
       ) {
         return createResponse("BAD_REQUEST", "Contract is not whitelisted");
       }
+      tx.feePayer = process.env.ACCOUNT_ADDRESS as string;
+
       // balance check
       if (!targetContract) {
         dapp = await getDappfromContract(targetContract as string);
@@ -55,6 +61,7 @@ export async function POST(req: NextRequest) {
 
     const provider = pickProviderFromPool();
     const feePayer = new Wallet(
+      process.env.ACCOUNT_ADDRESS as string,
       process.env.FEE_PAYER_PRIVATE_KEY as string,
       provider
     );
