@@ -2,7 +2,7 @@ import { ethers } from "ethers";
 import React, { useState } from "react";
 import EditModal from "./EditModal";
 import { useSession } from "next-auth/react";
-import fetchData from "@/lib/apiUtils";
+import { fetchData } from "@/lib/apiUtils";
 import { Contract, Dapp } from "@/types";
 
 interface DappCardProps {

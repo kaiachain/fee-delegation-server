@@ -1,7 +1,7 @@
 "use client";
 
 import { ethers } from "ethers";
-import fetchData from "@/lib/apiUtils";
+import { fetchData } from "@/lib/apiUtils";
 import { useSession } from "next-auth/react";
 import React, { useRef, useState } from "react";
 import Modal from "react-modal";
