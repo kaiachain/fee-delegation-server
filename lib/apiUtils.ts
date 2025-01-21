@@ -76,7 +76,7 @@ export const isWhitelistedContract = async (address: string) => {
   const contract = await prisma.contract.findUnique({
     where: { address },
   });
-  return contract ? false : true;
+  return contract ? true : false;
 };
 
 export const isWhitelistedSender = async (address: string) => {
@@ -86,13 +86,16 @@ export const isWhitelistedSender = async (address: string) => {
   const sender = await prisma.sender.findUnique({
     where: { address },
   });
-  return sender ? false : true;
+  return sender ? true : false;
 };
 
 export const getDappfromContract = async (address: string) => {
   const contract = await prisma.contract.findUnique({
     where: { address },
   });
+  if (!contract) {
+    return null;
+  }
   const dapp = await prisma.dApp.findUnique({
     where: { id: contract?.dappId },
   });
@@ -103,6 +106,9 @@ export const getDappfromSender = async (address: string) => {
   const sender = await prisma.sender.findUnique({
     where: { address },
   });
+  if (!sender) {
+    return null;
+  }
   const dapp = await prisma.dApp.findUnique({
     where: { id: sender?.dappId },
   });

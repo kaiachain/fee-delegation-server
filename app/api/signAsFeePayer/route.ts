@@ -16,8 +16,11 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { userSignedTx } = body;
 
-    if (!userSignedTx) {
-      return createResponse("BAD_REQUEST", "userSignedTx is required");
+    if (!userSignedTx || userSignedTx.raw === undefined) {
+      return createResponse(
+        "BAD_REQUEST",
+        "userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }"
+      );
     }
 
     const userSignedTxRlp = userSignedTx.raw;
@@ -25,9 +28,9 @@ export async function POST(req: NextRequest) {
 
     // if it's testnet, allow all transactions
     let dapp;
+    const targetContract = tx.to?.toLowerCase() as string;
+    const sender = tx.from?.toLowerCase() as string;
     if (process.env.NETWORK === "mainnet") {
-      const targetContract = tx.to?.toLowerCase() as string;
-      const sender = tx.from?.toLowerCase() as string;
       if (
         !(
           (await isWhitelistedContract(targetContract)) ||
@@ -41,17 +44,18 @@ export async function POST(req: NextRequest) {
       // balance check
       if (!targetContract) {
         dapp = await getDappfromContract(targetContract as string);
-        console.log(1);
         if (!dapp && !sender) {
           dapp = await getDappfromSender(sender as string);
-          console.log(2);
         } else {
           return createResponse("BAD_REQUEST", "Address not found");
         }
       }
 
       if (dapp && !isEnoughBalance(BigInt(dapp.balance))) {
-        return createResponse("BAD_REQUEST", "Insufficient balance");
+        return createResponse(
+          "BAD_REQUEST",
+          "Insufficient balance in fee delegation server, please contact us"
+        );
       }
     }
 
@@ -65,23 +69,60 @@ export async function POST(req: NextRequest) {
     const txHash = await feePayer.sendTransactionAsFeePayer(tx);
     const receipt = await txHash.wait();
 
-    // update balance, totalUsed
-    if (process.env.NETWORK === "mainnet" && dapp) {
-      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
-        const usedFee = receipt?.gasUsed * BigInt(receipt?.gasPrice);
-        await updateDappWithFee(dapp, usedFee);
-      }
+    try {
+      await settlement(targetContract, sender, receipt);
+    } catch (error) {
+      console.log(JSON.stringify(error));
+      return createResponse("INTERNAL_ERROR", JSON.stringify(error));
     }
 
-    if (receipt?.status !== 1) {
-      return createResponse("BAD_REQUEST", receipt);
-    }
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     console.log(JSON.stringify(error));
-    const msg = JSON.parse(JSON.stringify(error))?.error?.message || "";
-    if (msg === "")
+    const errorMsg = JSON.parse(JSON.stringify(error));
+    if (errorMsg?.code === "CALL_EXCEPTION") {
+      try {
+        await settlement(
+          errorMsg.transaction.to.toLowerCase(),
+          errorMsg.transaction.from.toLowerCase(),
+          errorMsg.receipt
+        );
+      } catch (error) {
+        console.log(JSON.stringify(error));
+        return createResponse("INTERNAL_ERROR", JSON.stringify(error));
+      }
+      return createResponse("INTERNAL_ERROR", JSON.stringify(error));
+    }
+
+    if (errorMsg?.error?.message === "")
       return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
-    return createResponse("INTERNAL_ERROR", msg);
+
+    return createResponse("INTERNAL_ERROR", errorMsg?.error?.message);
   }
 }
+
+const settlement = async (
+  contractAddress: string,
+  senderAddress: string,
+  receipt: any
+) => {
+  let dapp;
+  console.log(contractAddress, senderAddress);
+  if (process.env.NETWORK === "mainnet") {
+    if (contractAddress) {
+      dapp = await getDappfromContract(contractAddress as string);
+    }
+    if (!dapp && senderAddress) {
+      dapp = await getDappfromSender(senderAddress as string);
+    }
+    if (dapp) {
+      console.log(receipt);
+      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
+        const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
+        await updateDappWithFee(dapp, usedFee);
+      }
+    } else {
+      throw new Error("Settlement failed");
+    }
+  }
+};
