@@ -66,7 +66,6 @@ export async function POST(req: NextRequest) {
     );
 
     const txResp = await feePayer.sendTransactionAsFeePayer(tx);
-    console.log("txResp", txResp);
     let cnt = 0;
     let receipt;
     do {
@@ -93,6 +92,7 @@ export async function POST(req: NextRequest) {
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));
+    console.error(errorMsg);
     if (errorMsg?.error?.message === "")
       return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
 
