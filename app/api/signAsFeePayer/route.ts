@@ -72,13 +72,12 @@ export async function POST(req: NextRequest) {
     try {
       await settlement(targetContract, sender, receipt);
     } catch (error) {
-      console.log(JSON.stringify(error));
+      console.error(JSON.stringify(error));
       return createResponse("INTERNAL_ERROR", JSON.stringify(error));
     }
 
     return createResponse("SUCCESS", receipt);
   } catch (error) {
-    console.log(JSON.stringify(error));
     const errorMsg = JSON.parse(JSON.stringify(error));
     if (errorMsg?.code === "CALL_EXCEPTION") {
       try {
@@ -88,15 +87,17 @@ export async function POST(req: NextRequest) {
           errorMsg.receipt
         );
       } catch (error) {
-        console.log(JSON.stringify(error));
-        return createResponse("INTERNAL_ERROR", JSON.stringify(error));
+        const errorMsg = JSON.stringify(error);
+        console.error(errorMsg);
+        return createResponse("INTERNAL_ERROR", errorMsg);
       }
-      return createResponse("INTERNAL_ERROR", JSON.stringify(error));
+      return createResponse("INTERNAL_ERROR", errorMsg);
     }
 
     if (errorMsg?.error?.message === "")
       return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
 
+    console.error(JSON.stringify(errorMsg));
     return createResponse("INTERNAL_ERROR", errorMsg?.error?.message);
   }
 }
@@ -107,7 +108,6 @@ const settlement = async (
   receipt: any
 ) => {
   let dapp;
-  console.log(contractAddress, senderAddress);
   if (process.env.NETWORK === "mainnet") {
     if (contractAddress) {
       dapp = await getDappfromContract(contractAddress as string);
@@ -116,10 +116,11 @@ const settlement = async (
       dapp = await getDappfromSender(senderAddress as string);
     }
     if (dapp) {
-      console.log(receipt);
       if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
         const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
         await updateDappWithFee(dapp, usedFee);
+      } else {
+        throw new Error("field missing in receipt:" + JSON.stringify(receipt));
       }
     } else {
       throw new Error("Settlement failed");
