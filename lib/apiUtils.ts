@@ -47,7 +47,7 @@ export const fetchData = async (
     const data = await response.json();
     if (!response.status.toString().startsWith("2")) {
       alert("API request failed:");
-      console.log("API request failed:", data);
+      console.error("API request failed:", data);
       return {
         status: false,
       };

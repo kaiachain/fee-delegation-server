@@ -37,7 +37,10 @@ export async function POST(req: NextRequest) {
           (await isWhitelistedSender(sender))
         )
       ) {
-        return createResponse("BAD_REQUEST", "Contract is not whitelisted");
+        return createResponse(
+          "BAD_REQUEST",
+          "Contract or sender address are not whitelisted"
+        );
       }
       tx.feePayer = process.env.ACCOUNT_ADDRESS as string;
 
@@ -58,6 +61,7 @@ export async function POST(req: NextRequest) {
         );
       }
     }
+
     const provider = pickProviderFromPool();
     const feePayer = new Wallet(
       process.env.ACCOUNT_ADDRESS as string,
@@ -65,22 +69,8 @@ export async function POST(req: NextRequest) {
       provider
     );
 
-    const txResp = await feePayer.sendTransactionAsFeePayer(tx);
-    let cnt = 0;
-    let receipt;
-    do {
-      await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log("waiting for receipt", cnt);
-      receipt = await provider.getTransactionReceipt(txResp.hash);
-      if (receipt) {
-        break;
-      }
-      cnt++;
-    } while (cnt < 40);
-
-    if (!receipt) {
-      return createResponse("INTERNAL_ERROR", "Transaction failed");
-    }
+    const txHash = await feePayer.sendTransactionAsFeePayer(tx);
+    const receipt = await txHash.wait();
 
     try {
       await settlement(targetContract, sender, receipt);
@@ -89,14 +79,30 @@ export async function POST(req: NextRequest) {
       return createResponse("INTERNAL_ERROR", JSON.stringify(error));
     }
 
+    console.info("[SUCCESS] Transaction hash: ", txHash.hash);
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));
-    console.error(errorMsg);
-    if (errorMsg?.error?.message === "")
-      return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
+    console.error(JSON.stringify(errorMsg));
+    if (errorMsg?.code === "CALL_EXCEPTION") {
+      try {
+        await settlement(
+          errorMsg.transaction.to.toLowerCase(),
+          errorMsg.transaction.from.toLowerCase(),
+          errorMsg.receipt
+        );
+      } catch (error) {
+        const settlementError = JSON.stringify(error);
+        console.error(settlementError);
+        return createResponse("INTERNAL_ERROR", settlementError);
+      }
+    }
 
-    return createResponse("INTERNAL_ERROR", errorMsg?.error?.message);
+    const returnErrorMsg = errorMsg?.error?.message || errorMsg?.shortMessage;
+    if (returnErrorMsg === "")
+      return createResponse("INTERNAL_ERROR", JSON.stringify(errorMsg));
+
+    return createResponse("INTERNAL_ERROR", returnErrorMsg);
   }
 }
 
@@ -106,7 +112,6 @@ const settlement = async (
   receipt: any
 ) => {
   let dapp;
-  console.log(contractAddress, senderAddress);
   if (process.env.NETWORK === "mainnet") {
     if (contractAddress) {
       dapp = await getDappfromContract(contractAddress as string);
@@ -115,10 +120,11 @@ const settlement = async (
       dapp = await getDappfromSender(senderAddress as string);
     }
     if (dapp) {
-      console.log(receipt);
       if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
         const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
         await updateDappWithFee(dapp, usedFee);
+      } else {
+        throw new Error("field missing in receipt:" + JSON.stringify(receipt));
       }
     } else {
       throw new Error("Settlement failed");
