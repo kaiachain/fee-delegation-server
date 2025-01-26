@@ -61,7 +61,6 @@ export async function POST(req: NextRequest) {
         );
       }
     }
-
     const provider = pickProviderFromPool();
     const feePayer = new Wallet(
       process.env.ACCOUNT_ADDRESS as string,
@@ -69,8 +68,22 @@ export async function POST(req: NextRequest) {
       provider
     );
 
-    const txHash = await feePayer.sendTransactionAsFeePayer(tx);
-    const receipt = await txHash.wait();
+    const txResp = await feePayer.sendTransactionAsFeePayer(tx);
+    let cnt = 0;
+    let receipt;
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log("waiting for receipt", cnt);
+      receipt = await provider.getTransactionReceipt(txResp.hash);
+      if (receipt) {
+        break;
+      }
+      cnt++;
+    } while (cnt < 40);
+
+    if (!receipt) {
+      return createResponse("INTERNAL_ERROR", "Transaction failed");
+    }
 
     try {
       await settlement(targetContract, sender, receipt);
