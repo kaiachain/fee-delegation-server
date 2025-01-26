@@ -98,10 +98,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    if (errorMsg?.error?.message === "")
+    const returnErrorMsg = errorMsg?.error?.message || errorMsg?.shortMessage;
+    if (returnErrorMsg === "")
       return createResponse("INTERNAL_ERROR", JSON.stringify(errorMsg));
 
-    return createResponse("INTERNAL_ERROR", errorMsg?.error?.message);
+    return createResponse("INTERNAL_ERROR", returnErrorMsg);
   }
 }
 
