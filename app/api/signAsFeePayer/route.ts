@@ -24,9 +24,7 @@ export async function POST(req: NextRequest) {
     }
 
     const userSignedTxRlp = userSignedTx.raw;
-    console.log("userSignedTxRlp: ", userSignedTxRlp);
     const tx = parseTransaction(userSignedTxRlp);
-    console.log("tx: ", tx);
 
     // if it's testnet, allow all transactions
     let dapp;
@@ -71,10 +69,8 @@ export async function POST(req: NextRequest) {
       provider
     );
 
-    console.log("start sending transaction as fee payer");
     const txHash = await feePayer.sendTransactionAsFeePayer(tx);
     const receipt = await txHash.wait();
-    console.log("transaction sent successfully");
 
     try {
       await settlement(targetContract, sender, receipt);
@@ -104,7 +100,7 @@ export async function POST(req: NextRequest) {
 
     const returnErrorMsg = errorMsg?.error?.message || errorMsg?.shortMessage;
     if (returnErrorMsg === "") {
-      console.log(JSON.stringify(error));
+      console.error("Error message is empty", JSON.stringify(error));
       return createResponse("INTERNAL_ERROR", JSON.stringify(errorMsg));
     }
 
