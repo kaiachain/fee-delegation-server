@@ -37,7 +37,10 @@ export async function POST(req: NextRequest) {
           (await isWhitelistedSender(sender))
         )
       ) {
-        return createResponse("BAD_REQUEST", "Contract is not whitelisted");
+        return createResponse(
+          "BAD_REQUEST",
+          "Contract or sender address are not whitelisted"
+        );
       }
       tx.feePayer = process.env.ACCOUNT_ADDRESS as string;
 
@@ -76,9 +79,11 @@ export async function POST(req: NextRequest) {
       return createResponse("INTERNAL_ERROR", JSON.stringify(error));
     }
 
+    console.info("[SUCCESS] Transaction hash: ", txHash.hash);
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));
+    console.error(JSON.stringify(errorMsg));
     if (errorMsg?.code === "CALL_EXCEPTION") {
       try {
         await settlement(
@@ -87,17 +92,15 @@ export async function POST(req: NextRequest) {
           errorMsg.receipt
         );
       } catch (error) {
-        const errorMsg = JSON.stringify(error);
-        console.error(errorMsg);
-        return createResponse("INTERNAL_ERROR", errorMsg);
+        const settlementError = JSON.stringify(error);
+        console.error(settlementError);
+        return createResponse("INTERNAL_ERROR", settlementError);
       }
-      return createResponse("INTERNAL_ERROR", errorMsg);
     }
 
     if (errorMsg?.error?.message === "")
-      return createResponse("INTERNAL_ERROR", "An unexpected error occurred");
+      return createResponse("INTERNAL_ERROR", JSON.stringify(errorMsg));
 
-    console.error(JSON.stringify(errorMsg));
     return createResponse("INTERNAL_ERROR", errorMsg?.error?.message);
   }
 }
