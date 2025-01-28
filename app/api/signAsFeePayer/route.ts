@@ -69,9 +69,22 @@ export async function POST(req: NextRequest) {
       provider
     );
 
-    const txHash = await feePayer.sendTransactionAsFeePayer(tx);
-    const receipt = await txHash.wait();
+    const txResp = await feePayer.sendTransactionAsFeePayer(tx);
+    let cnt = 0;
+    let receipt;
+    do {
+      await new Promise((resolve) => setTimeout(resolve, 1500));
+      console.log("waiting for receipt", cnt);
+      receipt = await provider.getTransactionReceipt(txResp.hash);
+      if (receipt) {
+        break;
+      }
+      cnt++;
+    } while (cnt < 40);
 
+    if (!receipt) {
+      return createResponse("INTERNAL_ERROR", "Transaction failed");
+    }
     try {
       await settlement(targetContract, sender, receipt);
     } catch (error) {
@@ -79,24 +92,16 @@ export async function POST(req: NextRequest) {
       return createResponse("INTERNAL_ERROR", JSON.stringify(error));
     }
 
-    console.info("[SUCCESS] Transaction hash: ", txHash.hash);
+    if (receipt.status === 0) {
+      console.error("[REVERTED] Transaction hash: ", txResp.hash);
+      return createResponse("REVERTED", receipt);
+    }
+
+    console.info("[SUCCESS] Transaction hash: ", txResp.hash);
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));
     console.error(JSON.stringify(errorMsg));
-    if (errorMsg?.code === "CALL_EXCEPTION") {
-      try {
-        await settlement(
-          errorMsg.transaction.to.toLowerCase(),
-          errorMsg.transaction.from.toLowerCase(),
-          errorMsg.receipt
-        );
-      } catch (error) {
-        const settlementError = JSON.stringify(error);
-        console.error(settlementError);
-        return createResponse("INTERNAL_ERROR", settlementError);
-      }
-    }
 
     const returnErrorMsg = errorMsg?.error?.message || errorMsg?.shortMessage;
     if (returnErrorMsg === "") {
