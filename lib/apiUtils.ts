@@ -11,6 +11,7 @@ const RESPONSE_MAP: {
   [key: string]: { message: string; status: number };
 } = {
   SUCCESS: { message: "Request was successful", status: 200 },
+  REVERTED: { message: "Transaction reverted", status: 200 },
   BAD_REQUEST: { message: "Bad request", status: 400 },
   METHOD_NOT_ALLOWED: { message: "Method not allowed", status: 405 },
   INTERNAL_ERROR: { message: "Internal server error", status: 500 },
