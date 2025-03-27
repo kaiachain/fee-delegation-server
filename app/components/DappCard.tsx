@@ -168,7 +168,7 @@ export const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
   };
 
   return (
-    <div className="flex flex-col bg-slate-300 mx-10 my-2 px-8 py-5 rounded-3xl w-[80%] relative">
+    <div className="flex flex-col bg-slate-300 mx-10 my-2 px-8 py-5 rounded-3xl w-[80%] relative dark:text-black">
       <h2 className="text-2xl font-bold mb-4">{dappInfo.name}</h2>
       <div className="flex flex-row gap-8">
         <p className="flex flex-row items-center font-bold gap-2">
