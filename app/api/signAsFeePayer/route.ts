@@ -2,8 +2,8 @@ import { NextRequest } from "next/server";
 import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
 import {
-  isWhitelistedContract,
-  isWhitelistedSender,
+  checkWhitelistedContract,
+  checkWhitelistedSender,
   getDappfromContract,
   getDappfromSender,
   isEnoughBalance,
@@ -24,18 +24,20 @@ export async function POST(req: NextRequest) {
     }
 
     const userSignedTxRlp = userSignedTx.raw;
-    const tx = parseTransaction(userSignedTxRlp);
+    let tx: any;
+    try {
+      tx = parseTransaction(userSignedTxRlp);
+    } catch (e) {
+      console.error("Tx Parsing Error: " + JSON.stringify(e));
+    }
 
     // if it's testnet, allow all transactions
-    let dapp;
-    const targetContract = tx.to?.toLowerCase() as string;
-    const sender = tx.from?.toLowerCase() as string;
+    const targetContract = tx.to?.toLowerCase() ?? "";
+    const sender = tx.from?.toLowerCase() ?? "";
     if (process.env.NETWORK === "mainnet") {
       if (
-        !(
-          (await isWhitelistedContract(targetContract)) ||
-          (await isWhitelistedSender(sender))
-        )
+        !(await checkWhitelistedContract(targetContract)) &&
+        !(await checkWhitelistedSender(sender))
       ) {
         return createResponse(
           "BAD_REQUEST",
@@ -45,16 +47,20 @@ export async function POST(req: NextRequest) {
       tx.feePayer = process.env.ACCOUNT_ADDRESS as string;
 
       // balance check
-      if (!targetContract) {
-        dapp = await getDappfromContract(targetContract as string);
-        if (!dapp && !sender) {
-          dapp = await getDappfromSender(sender as string);
-        } else {
-          return createResponse("BAD_REQUEST", "Address not found");
-        }
+      let dapp = null;
+      if (targetContract) {
+        dapp = await getDappfromContract(targetContract);
       }
 
-      if (dapp && !isEnoughBalance(BigInt(dapp.balance))) {
+      if (!dapp && sender) {
+        dapp = await getDappfromSender(sender);
+      }
+
+      if (!dapp) {
+        return createResponse("BAD_REQUEST", "Address not found");
+      }
+
+      if (!isEnoughBalance(BigInt(dapp.balance ?? 0))) {
         return createResponse(
           "BAD_REQUEST",
           "Insufficient balance in fee delegation server, please contact us"
@@ -69,18 +75,28 @@ export async function POST(req: NextRequest) {
       provider
     );
 
-    const txResp = await feePayer.sendTransactionAsFeePayer(tx);
+    const feePayerSignedTx = await feePayer.signTransactionAsFeePayer(tx);
+    let txHash;
+    try {
+      txHash = await provider.send("klay_sendRawTransaction", [
+        feePayerSignedTx,
+      ]);
+      // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
+    } catch (e) {
+      console.error("Transaction send failed txHash: " + txHash);
+    }
     let cnt = 0;
     let receipt;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
       console.log("waiting for receipt", cnt);
-      receipt = await provider.getTransactionReceipt(txResp.hash);
+      // receipt = await provider.getTransactionReceipt(txResp.hash);
+      receipt = await provider.getTransactionReceipt(txHash);
       if (receipt) {
         break;
       }
       cnt++;
-    } while (cnt < 40);
+    } while (cnt < 5);
 
     if (!receipt) {
       return createResponse("INTERNAL_ERROR", "Transaction failed");
@@ -93,11 +109,13 @@ export async function POST(req: NextRequest) {
     }
 
     if (receipt.status === 0) {
-      console.error("[REVERTED] Transaction hash: ", txResp.hash);
+      // console.error("[REVERTED] Transaction hash: ", txResp.hash);
+      console.error("[REVERTED] Transaction hash: ", txHash);
       return createResponse("REVERTED", receipt);
     }
 
-    console.info("[SUCCESS] Transaction hash: ", txResp.hash);
+    // console.info("[SUCCESS] Transaction hash: ", txResp.hash);
+    console.info("[SUCCESS] Transaction hash: ", txHash);
     return createResponse("SUCCESS", receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));

@@ -70,24 +70,26 @@ export const formattedBalance = (balance: string): string => {
   ).toFixed(5);
 };
 
-export const isWhitelistedContract = async (address: string) => {
+export const checkWhitelistedContract = async (address: string) => {
   if (!address) {
     return false;
   }
   const contract = await prisma.contract.findUnique({
     where: { address },
+    select: { address: true },
   });
-  return contract ? true : false;
+  return !!contract;
 };
 
-export const isWhitelistedSender = async (address: string) => {
+export const checkWhitelistedSender = async (address: string) => {
   if (!address) {
     return false;
   }
   const sender = await prisma.sender.findUnique({
     where: { address },
+    select: { address: true },
   });
-  return sender ? true : false;
+  return !!sender;
 };
 
 export const getDappfromContract = async (address: string) => {
