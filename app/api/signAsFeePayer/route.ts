@@ -78,27 +78,37 @@ export async function POST(req: NextRequest) {
 
     const feePayerSignedTx = await feePayer.signTransactionAsFeePayer(tx);
     let txHash;
-    try {
-      txHash = await provider.send("klay_sendRawTransaction", [
-        feePayerSignedTx,
-      ]);
-      // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
-    } catch (e) {
-      console.error("Transaction send failed txHash: " + txHash);
-      return createResponse("INTERNAL_ERROR", "Transaction send failed");
-    }
-    let cnt = 0;
+    let sendCnt = 0;
+    do {
+      try {
+        txHash = await provider.send("klay_sendRawTransaction", [
+          feePayerSignedTx,
+        ]);
+        // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
+        if (txHash) break;
+      } catch (e) {
+        console.error(
+          "Transaction send failed: sender - " +
+            sender +
+            ", contract - " +
+            targetContract
+        );
+      }
+      sendCnt++;
+    } while (sendCnt < 5);
+
     let receipt;
+    let waitCnt = 0;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log("waiting for receipt", cnt);
+      console.log("waiting for receipt", waitCnt);
       // receipt = await provider.getTransactionReceipt(txResp.hash);
       receipt = await provider.getTransactionReceipt(txHash);
       if (receipt) {
         break;
       }
-      cnt++;
-    } while (cnt < 5);
+      waitCnt++;
+    } while (waitCnt < 5);
 
     if (!receipt) {
       return createResponse("INTERNAL_ERROR", "Transaction failed");
