@@ -29,6 +29,7 @@ export async function POST(req: NextRequest) {
       tx = parseTransaction(userSignedTxRlp);
     } catch (e) {
       console.error("Tx Parsing Error: " + JSON.stringify(e));
+      return createResponse("BAD_REQUEST", "Failed to parse transaction");
     }
 
     // if it's testnet, allow all transactions
