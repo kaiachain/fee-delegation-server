@@ -88,7 +88,10 @@ export async function POST(req: NextRequest) {
         if (txHash) break;
       } catch (e) {
         console.error(
-          "Transaction send failed: sender - " +
+          "[" +
+            sendCnt +
+            " try]" +
+            "Transaction send failed: sender - " +
             sender +
             ", contract - " +
             targetContract
@@ -96,6 +99,13 @@ export async function POST(req: NextRequest) {
       }
       sendCnt++;
     } while (sendCnt < 5);
+
+    if (!txHash) {
+      return createResponse(
+        "INTERNAL_ERROR",
+        "Sending transaction was failed after 5 try, network is busy"
+      );
+    }
 
     let receipt;
     let waitCnt = 0;
@@ -108,11 +118,12 @@ export async function POST(req: NextRequest) {
         break;
       }
       waitCnt++;
-    } while (waitCnt < 5);
+    } while (waitCnt < 15);
 
     if (!receipt) {
-      return createResponse("INTERNAL_ERROR", "Transaction failed");
+      return createResponse("INTERNAL_ERROR", "Transaction was failed");
     }
+
     try {
       await settlement(targetContract, sender, receipt);
     } catch (error) {
