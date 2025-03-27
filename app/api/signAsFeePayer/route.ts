@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
       // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
     } catch (e) {
       console.error("Transaction send failed txHash: " + txHash);
+      return createResponse("INTERNAL_ERROR", "Transaction send failed");
     }
     let cnt = 0;
     let receipt;
