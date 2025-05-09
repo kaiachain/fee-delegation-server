@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage senders");
     }
 
     const { dappId, address } = await req.json();
@@ -56,7 +56,7 @@ export async function DELETE(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage senders");
     }
 
     const { id } = await req.json();
@@ -72,7 +72,7 @@ export async function DELETE(req: NextRequest) {
     });
 
     if (!sender) {
-      return createResponse("BAD_REQUEST", "Sender not found");
+      return createResponse("NOT_FOUND", "Sender not found");
     }
 
     await prisma.sender.delete({

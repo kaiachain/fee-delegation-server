@@ -1,11 +1,12 @@
 "use client";
 
-import { ethers } from "ethers";
-import { fetchData } from "@/lib/apiUtils";
-import { useSession } from "next-auth/react";
-import React, { useRef, useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import Modal from "react-modal";
-import { Contract, Dapp, Sender } from "@/types";
+import { ethers } from "ethers";
+import { useSession } from "next-auth/react";
+import { fetchData } from "@/lib/apiUtils";
+import { Dapp, Contract, Sender } from "@/types";
+import ErrorModal from "./ErrorModal";
 
 interface AddDappModalProps {
   isModalOpen: boolean;
@@ -25,11 +26,46 @@ export default function AddDappModal({
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [balance, setBalance] = useState<number>(0);
+  const [terminationDate, setTerminationDate] = useState<string>("");
   const [contractAddress, setContractAddress] = useState("");
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [senderAddress, setSenderAddress] = useState("");
   const [senders, setSenders] = useState<Sender[]>([]);
+  const [hasSwap, setHasSwap] = useState(false);
+  const [swapAddress, setSwapAddress] = useState("");
+  const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title: string; message: string }>({
+    isOpen: false,
+    title: "",
+    message: ""
+  });
   const { data: session } = useSession();
+
+  // Convert UTC to KST for display
+  const convertUTCtoKST = (utcDate: string) => {
+    if (!utcDate) return "";
+    const date = new Date(utcDate);
+    const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // Add 9 hours for KST
+    return kstDate.toLocaleDateString("ko-KR", {
+      timeZone: "UTC",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    });
+  };
+
+  // Convert KST to UTC for saving
+  const convertKSTtoUTC = (kstDate: string) => {
+    if (!kstDate) return "";
+    const date = new Date(kstDate);
+    const utcDate = new Date(date.getTime() - (9 * 60 * 60 * 1000)); // Subtract 9 hours for UTC
+    return utcDate.toISOString();
+  };
+
+  useEffect(() => {
+    if (isModalOpen) {
+      resetForm();
+    }
+  }, [isModalOpen]);
 
   const handleCAddKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -43,30 +79,145 @@ export default function AddDappModal({
     }
   };
 
-  const handleAddContract = () => {
+  const handleAddContract = async () => {
     if (contractAddress.trim() && ethers.isAddress(contractAddress)) {
-      setContracts([...contracts, { address: contractAddress }]);
+      // Check for duplicate contract with same address and swap configuration
+      const isDuplicate = contracts.some((contract) => {
+        const addressMatch = contract.address.toLowerCase() === contractAddress.toLowerCase();
+        if (!hasSwap && !contract.hasSwap) {
+          return addressMatch; // Both are non-swap contracts
+        }
+        if (hasSwap && contract.hasSwap) {
+          // Both are swap contracts, check swap addresses
+          return addressMatch && contract.swapAddress?.toLowerCase() === swapAddress.toLowerCase();
+        }
+        return false; // Different swap configurations
+      });
+
+      if (isDuplicate) {
+        setErrorModal({
+          isOpen: true,
+          title: "Duplicate Contract",
+          message: "A contract with this address already exists."
+        });
+        return;
+      }
+
+      // Check if contract exists in any other DApp
+      const existingContract = await fetchData(
+        "/contracts/check",
+        {
+          method: "POST",
+          body: {
+            address: contractAddress,
+            hasSwap,
+            swapAddress: hasSwap ? swapAddress : null
+          }
+        },
+        session
+      );
+
+      if (existingContract.status === "SUCCESS" && existingContract.data) {
+        setErrorModal({
+          isOpen: true,
+          title: "Contract Already Exists",
+          message: "This contract address is already registered with another DApp."
+        });
+        return;
+      }
+
+      setContracts([...contracts, { 
+        address: contractAddress, 
+        hasSwap,
+        swapAddress: hasSwap ? swapAddress : undefined 
+      }]);
       setContractAddress("");
+      setSwapAddress("");
+      setHasSwap(false);
     } else {
-      alert("Please enter a valid contract address.");
+      setErrorModal({
+        isOpen: true,
+        title: "Invalid Contract Address",
+        message: "Please enter a valid contract address."
+      });
     }
   };
 
-  const handleAddSender = () => {
+  const handleAddSender = async () => {
     if (senderAddress.trim() && ethers.isAddress(senderAddress)) {
+      // Check for duplicate sender address
+      const isDuplicate = senders.some(
+        (sender) => sender.address.toLowerCase() === senderAddress.toLowerCase()
+      );
+
+      if (isDuplicate) {
+        setErrorModal({
+          isOpen: true,
+          title: "Duplicate Sender",
+          message: "This sender address has already been added."
+        });
+        return;
+      }
+
+      // Check if sender exists in any other DApp
+      const existingSender = await fetchData(
+        "/senders/check",
+        {
+          method: "POST",
+          body: {
+            address: senderAddress
+          }
+        },
+        session
+      );
+
+      if (existingSender.status === "SUCCESS" && existingSender.data) {
+        setErrorModal({
+          isOpen: true,
+          title: "Sender Already Exists",
+          message: "This sender address is already registered with another DApp."
+        });
+        return;
+      }
+
       setSenders([...senders, { address: senderAddress }]);
       setSenderAddress("");
     } else {
-      alert("Please enter a valid sender address.");
+      setErrorModal({
+        isOpen: true,
+        title: "Invalid Sender Address",
+        message: "Please enter a valid sender address."
+      });
+    }
+  };
+
+  const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    // Remove leading zeros and convert to number
+    const cleanValue = value.replace(/^0+/, '') || '0';
+    // Only allow numbers
+    if (/^\d*$/.test(cleanValue)) {
+      setBalance(Number(cleanValue));
     }
   };
 
   const handleAddDapp = async () => {
     if (name.trim() && url.trim() && balance >= 0) {
+      // Check if either contracts or senders are provided
+      if (contracts.length === 0 && senders.length === 0) {
+        setErrorModal({
+          isOpen: true,
+          title: "Missing Required Fields",
+          message: "Please add at least one contract or sender address."
+        });
+        return;
+      }
+
       const newDapp: Dapp = {
         name,
         url,
         balance,
+        ...(terminationDate && { terminationDate: convertKSTtoUTC(terminationDate) }),
         contracts,
         senders,
       };
@@ -81,18 +232,43 @@ export default function AddDappModal({
       );
 
       if (!result.status) {
+        let errorMessage = "There was an error adding the DApp. Please try again.";
+        
+        // Handle specific error cases based on error code
+        switch (result.error) {
+          case "CONFLICT":
+            errorMessage = "A DApp with this name or address combination already exists. Please try again choosing a different name or address.";
+            break;
+          case "BAD_REQUEST":
+            errorMessage = result.message || "Invalid DApp data. Please check all fields and try again.";
+            break;
+          case "UNAUTHORIZED":
+            errorMessage = "You don't have permission to create DApps. Please contact an administrator.";
+            break;
+          case "INTERNAL_ERROR":
+            errorMessage = result.message || "An unexpected error occurred. Please try again later.";
+            break;
+          default:
+            errorMessage = result.message || errorMessage;
+        }
+
+        setErrorModal({
+          isOpen: true,
+          title: "Failed to Add DApp",
+          message: errorMessage
+        });
         return;
       }
-      delete result.status;
-      onDappAdd({
-        ...result,
-        contracts: newDapp.contracts,
-        senders: newDapp.senders,
-      });
+
+      onDappAdd(result.data);
       setIsModalOpen(false);
       resetForm();
     } else {
-      alert("Please fill out all fields correctly.");
+      setErrorModal({
+        isOpen: true,
+        title: "Invalid Input",
+        message: "Please fill out all required fields correctly."
+      });
     }
   };
 
@@ -100,170 +276,310 @@ export default function AddDappModal({
     setName("");
     setUrl("");
     setBalance(0);
+    setTerminationDate("");
     setContracts([]);
     setContractAddress("");
+    setSwapAddress("");
+    setHasSwap(false);
+    setSenders([]);
+    setSenderAddress("");
   };
 
   return (
-    <Modal
-      isOpen={isModalOpen}
-      onRequestClose={() => setIsModalOpen(false)} // 모달 닫기
-      contentLabel="Add Dapp"
-      ariaHideApp={false}
-      className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-1"
-    >
-      <div className="bg-white p-6 rounded-lg w-1/3">
-        <h2 className="text-xl font-bold mb-4">Add Dapp</h2>
-        <div className="flex flex-row items-center gap-2">
-          <label className="mb-2 w-[20%]" htmlFor="name">
-            Name
-          </label>
-          <input
-            type="text"
-            placeholder="Enter name"
-            className="border border-gray-300 p-2 mb-4 w-full"
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-row items-center gap-2">
-          <label className="mb-2 w-[20%]" htmlFor="url">
-            URL
-          </label>
-          <input
-            type="text"
-            placeholder="Enter URL"
-            className="border border-gray-300 p-2 mb-4 w-full"
-            id="url"
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-          />
-        </div>
-        <div className="flex flex-row items-center gap-2">
-          <label className="mb-2 w-[20%]" htmlFor="balance">
-            Balance
-          </label>
-          <input
-            type="number"
-            placeholder="Enter balance"
-            className="border border-gray-300 p-2 mb-4 w-full"
-            id="balance"
-            value={balance}
-            onChange={(e) => setBalance(Number(e.target.value))}
-          />
-        </div>
-        <div className="flex flex-col">
-          <label className="mb-1" htmlFor="contracts">
-            Contracts
-          </label>
-          {contracts.map((contract) => (
-            <div
-              key={contract.address}
-              className="flex flex-row items-center gap-2 mb-1"
-            >
-              <input
-                type="text"
-                placeholder="Enter contract address"
-                className="bg-gray-100 p-2 w-full"
-                value={contract.address}
-                readOnly
-              />
-              <button
-                onClick={() =>
-                  setContracts(
-                    contracts.filter((c) => c.address !== contract.address)
-                  )
-                }
-                className="flex items-center justify-center bg-slate-400 text-white px-2 pb-0.5 h-6 rounded-full opacity-30 hover:opacity-90 text-2xl"
-              >
-                -
-              </button>
+    <>
+      <Modal
+        isOpen={isModalOpen}
+        onRequestClose={() => setIsModalOpen(false)}
+        contentLabel="Add Dapp"
+        ariaHideApp={false}
+        className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50"
+      >
+        <div className="bg-white rounded-xl shadow-2xl w-[600px] max-h-[90vh] flex flex-col">
+          {/* Header with gradient background */}
+          <div className="relative">
+            <div className="absolute inset-0 bg-gradient-to-r from-blue-600 to-indigo-600 opacity-90 rounded-t-xl"></div>
+            <div className="relative px-6 py-4">
+              <div className="flex justify-between items-center">
+                <div className="flex items-center space-x-2">
+                  <svg className="w-6 h-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                  </svg>
+                  <div>
+                    <h2 className="text-xl font-bold text-white">Add New DApp</h2>
+                    <p className="text-blue-100 text-sm mt-1">Create a new decentralized application entry</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsModalOpen(false)}
+                  className="text-white hover:text-blue-100 transition-colors duration-200"
+                >
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
             </div>
-          ))}
-          <div className="flex flex-row items-center gap-2 mb-6">
-            <input
-              ref={cInputRef}
-              type="text"
-              placeholder="Enter contract address"
-              className="border border-gray-300 p-2 w-full"
-              id="contracts"
-              value={contractAddress}
-              onKeyDown={handleCAddKeyPress}
-              onChange={(e) => setContractAddress(e.target.value)}
-            />
+          </div>
+
+          {/* Content */}
+          <div className="px-6 py-6 space-y-6 overflow-y-auto">
+            {/* Basic Information Section */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900">Basic Information</h3>
+              </div>
+              
+              {/* Name Input */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  <span>DApp Name<span className="text-red-500 ml-1">*</span></span>
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                  placeholder="Enter DApp name"
+                />
+              </div>
+
+              {/* URL Input */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                  </svg>
+                  <span>URL<span className="text-red-500 ml-1">*</span></span>
+                </label>
+                <input
+                  type="text"
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                  placeholder="Enter DApp URL"
+                />
+              </div>
+
+              {/* Balance Input */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>Balance<span className="text-red-500 ml-1">*</span></span>
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    value={balance}
+                    onChange={handleBalanceChange}
+                    className="w-full pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                    placeholder="Enter balance"
+                    min="0"
+                  />
+                  <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
+                    <span className="text-gray-500 text-sm">KAIA</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Termination Date Input */}
+              <div>
+                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                  </svg>
+                  <span>Service End Date (KST)</span>
+                </label>
+                <input
+                  type="date"
+                  value={terminationDate}
+                  onChange={(e) => setTerminationDate(e.target.value)}
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                />
+                <p className="mt-1 text-xs text-gray-500">Service will work normally on the selected date and stop on the next day in KST</p>
+              </div>
+            </div>
+
+            {/* Note about required fields */}
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <svg className="h-5 w-5 text-blue-400" viewBox="0 0 20 20" fill="currentColor">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="ml-3">
+                  <p className="text-sm text-blue-700">
+                    At least one contract or sender address must be provided.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Contracts Section */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900">Contracts</h3>
+              </div>
+              <div className="space-y-4">
+                <div className="flex space-x-3">
+                  <div className="flex-1 space-y-3">
+                    <input
+                      type="text"
+                      ref={cInputRef}
+                      value={contractAddress}
+                      onChange={(e) => setContractAddress(e.target.value)}
+                      onKeyPress={handleCAddKeyPress}
+                      className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                      placeholder="Enter contract address"
+                    />
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="hasSwap"
+                        checked={hasSwap}
+                        onChange={(e) => setHasSwap(e.target.checked)}
+                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded transition-colors duration-200"
+                      />
+                      <label htmlFor="hasSwap" className="text-sm text-gray-700">
+                        Enable Swap
+                      </label>
+                    </div>
+                    {hasSwap && (
+                      <input
+                        type="text"
+                        value={swapAddress}
+                        onChange={(e) => setSwapAddress(e.target.value)}
+                        className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                        placeholder="Enter swap TO Token address"
+                      />
+                    )}
+                  </div>
+                  <button
+                    ref={cAddButtonRef}
+                    onClick={handleAddContract}
+                    className="px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow"
+                  >
+                    Add
+                  </button>
+                </div>
+                {contracts.length > 0 && (
+                  <div className="space-y-2">
+                    {contracts.map((contract, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <div>
+                          <div className="text-sm font-mono text-gray-900">{contract.address}</div>
+                          {contract.hasSwap && contract.swapAddress && (
+                            <div className="text-xs text-gray-500 mt-1">
+                              Swap to: {contract.swapAddress}
+                            </div>
+                          )}
+                        </div>
+                        <button
+                          onClick={() => setContracts(contracts.filter((_, i) => i !== index))}
+                          className="text-red-500 hover:text-red-600 transition-colors duration-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Senders Section */}
+            <div className="space-y-4">
+              <div className="flex items-center space-x-2">
+                <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <h3 className="text-lg font-medium text-gray-900">Senders</h3>
+              </div>
+              <div className="space-y-4">
+                <div className="flex space-x-3">
+                  <input
+                    type="text"
+                    ref={sInputRef}
+                    value={senderAddress}
+                    onChange={(e) => setSenderAddress(e.target.value)}
+                    onKeyPress={handleSAddKeyPress}
+                    className="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                    placeholder="Enter sender address"
+                  />
+                  <button
+                    ref={sAddButtonRef}
+                    onClick={handleAddSender}
+                    className="px-4 py-2.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow"
+                  >
+                    Add
+                  </button>
+                </div>
+                {senders.length > 0 && (
+                  <div className="space-y-2">
+                    {senders.map((sender, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg border border-gray-200"
+                      >
+                        <span className="text-sm font-mono text-gray-900">{sender.address}</span>
+                        <button
+                          onClick={() => setSenders(senders.filter((_, i) => i !== index))}
+                          className="text-red-500 hover:text-red-600 transition-colors duration-200"
+                        >
+                          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-6 py-4 bg-gray-50 border-t border-gray-200 flex justify-end space-x-3 rounded-b-xl">
             <button
-              ref={cAddButtonRef}
-              onClick={handleAddContract}
-              className="flex items-center justify-center bg-slate-400 text-white px-1.5 py-0.5 h-6 rounded-full opacity-80 hover:opacity-100 text-xl"
+              onClick={() => setIsModalOpen(false)}
+              className="px-4 py-2.5 text-gray-700 bg-white border border-gray-300 hover:bg-gray-50 rounded-lg focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow"
             >
-              +
+              Cancel
+            </button>
+            <button
+              onClick={handleAddDapp}
+              className="px-4 py-2.5 text-white bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow"
+            >
+              Add DApp
             </button>
           </div>
         </div>
-        <div className="flex flex-col">
-          <label className="mb-1" htmlFor="senders">
-            Senders
-          </label>
-          {senders.map((sender) => (
-            <div
-              key={sender.address}
-              className="flex flex-row items-center gap-2 mb-1"
-            >
-              <input
-                type="text"
-                placeholder="Enter sender address"
-                className="bg-gray-100 p-2 w-full"
-                value={sender.address}
-                readOnly
-              />
-              <button
-                onClick={() =>
-                  setSenders(
-                    senders.filter((c) => c.address !== sender.address)
-                  )
-                }
-                className="flex items-center justify-center bg-slate-400 text-white px-2 pb-0.5 h-6 rounded-full opacity-30 hover:opacity-90 text-2xl"
-              >
-                -
-              </button>
-            </div>
-          ))}
-          <div className="flex flex-row items-center gap-2 mb-6">
-            <input
-              type="text"
-              placeholder="Enter sender address"
-              className="border border-gray-300 p-2 w-full"
-              id="senders"
-              value={senderAddress}
-              ref={sInputRef}
-              onKeyDown={handleSAddKeyPress}
-              onChange={(e) => setSenderAddress(e.target.value)}
-            />
-            <button
-              onClick={handleAddSender}
-              ref={sAddButtonRef}
-              className="flex items-center justify-center bg-slate-400 text-white px-1.5 py-0.5 h-6 rounded-full opacity-80 hover:opacity-100 text-xl"
-            >
-              +
-            </button>
-          </div>
-        </div>
-        <div className="flex justify-end gap-2">
-          <button
-            onClick={() => setIsModalOpen(false)}
-            className="bg-gray-500 text-white px-4 py-2 rounded"
-          >
-            Cancel
-          </button>
-          <button
-            onClick={handleAddDapp}
-            className="bg-blue-500 text-white px-4 py-2 rounded"
-          >
-            Submit
-          </button>
-        </div>
-      </div>
-    </Modal>
+      </Modal>
+
+      <ErrorModal
+        isOpen={errorModal.isOpen}
+        onClose={() => setErrorModal({ ...errorModal, isOpen: false })}
+        title={errorModal.title}
+        message={errorModal.message}
+      />
+    </>
   );
 }

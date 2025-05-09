@@ -1,6 +1,8 @@
 export interface Contract {
   id?: string;
   address: string;
+  hasSwap?: boolean;
+  swapAddress?: string;
 }
 
 export interface Sender {
@@ -15,6 +17,8 @@ export interface Dapp {
   totalUsed?: number;
   balance?: number;
   createdAt?: string;
+  terminationDate?: string;
+  active?: boolean;
   contracts?: Contract[];
   senders?: Sender[];
 }

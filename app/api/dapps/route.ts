@@ -20,12 +20,33 @@ export async function GET() {
       balance: formattedBalance(dapp.balance),
     }));
 
-    return NextResponse.json(formattedDapps);
+    return createResponse("SUCCESS", formattedDapps);
   } catch (error) {
     console.error("Error fetching dapps:", error);
     return createResponse("INTERNAL_ERROR", "Failed to fetch dapps");
   }
 }
+
+type CreateDAppData = {
+  name: string;
+  url: string;
+  active: boolean;
+  balance: string;
+  totalUsed: string;
+  terminationDate?: string;
+  contracts: {
+    create: Array<{
+      address: string;
+      hasSwap: boolean;
+      swapAddress: string | null;
+    }>;
+  };
+  senders: {
+    create: Array<{
+      address: string;
+    }>;
+  };
+};
 
 export async function POST(req: NextRequest) {
   try {
@@ -33,49 +54,105 @@ export async function POST(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to create DApps");
     }
 
-    const { name, url, balance, contracts, senders } = await req.json();
+    const { name, url, balance, terminationDate, contracts, senders } = await req.json();
 
-    const data: any = {
+    // Validate required fields
+    if (!name || !url) {
+      return createResponse("BAD_REQUEST", "Name and URL are required");
+    }
+
+    // Validate arrays
+    if (!Array.isArray(contracts) || !Array.isArray(senders)) {
+      return createResponse("BAD_REQUEST", "Contracts and senders must be arrays");
+    }
+
+    // Prepare data with proper types
+    const data: CreateDAppData = {
       name,
       url,
+      active: true,
+      balance: "0",
+      totalUsed: "0",
       contracts: {
-        create: contracts,
+        create: contracts.map((contract) => ({
+          address: contract.address,
+          hasSwap: contract.hasSwap || false,
+          swapAddress: contract.swapAddress || null,
+        })),
       },
       senders: {
-        create: senders,
+        create: senders.map((sender) => ({
+          address: sender.address,
+        })),
       },
     };
 
-    if (
-      !verifyDapp({
-        name,
-        url,
-        balance,
-        contracts,
-        senders,
-      })
-    ) {
-      return createResponse("BAD_REQUEST", "Invalid dapp data");
+    // Validate DApp data
+    if (!verifyDapp({
+      name,
+      url,
+      balance,
+      terminationDate,
+      contracts,
+      senders,
+    })) {
+      return createResponse("BAD_REQUEST", "Invalid DApp data. Please check all fields.");
     }
 
-    if (balance) {
-      const balanceInt = BigInt(balance) * BigInt(10 ** 18);
-      data.balance = balanceInt.toString();
+    // Handle balance
+    try {
+      if (balance) {
+        const balanceNum = Number(balance);
+        if (isNaN(balanceNum) || balanceNum < 0) {
+          return createResponse("BAD_REQUEST", "Invalid balance amount");
+        }
+        const balanceInt = BigInt(balanceNum) * BigInt(10 ** 18);
+        data.balance = balanceInt.toString();
+      }
+    } catch (error) {
+      return createResponse("BAD_REQUEST", "Invalid balance format");
     }
 
-    const dapp = await prisma.dApp.create({
-      data,
-    });
+    // Add termination date if provided
+    if (terminationDate) {
+      try {
+        new Date(terminationDate); // Validate date format
+        data.terminationDate = terminationDate;
+      } catch (error) {
+        return createResponse("BAD_REQUEST", "Invalid termination date format");
+      }
+    }
 
-    return NextResponse.json({
-      ...dapp,
-      balance: ethers.formatUnits(dapp.balance),
-    });
+    // Create DApp with error handling
+    try {
+      const dapp = await prisma.dApp.create({
+        data,
+        include: {
+          contracts: true,
+          senders: true,
+        },
+      });
+
+      return createResponse("SUCCESS", {
+        ...dapp,
+        balance: ethers.formatUnits(dapp.balance),
+        totalUsed: ethers.formatUnits(dapp.totalUsed),
+      });
+    } catch (error: any) {
+      console.log(error);
+      if (error.code === 'P2002') {
+        return createResponse("CONFLICT", "A DApp with this name or address combination already exists");
+      }
+      throw error; // Re-throw for general error handling
+    }
   } catch (error) {
-    console.error("Error creating dapp:", JSON.stringify(error));
+    console.error("Error creating dapp:", error);
+    if (error instanceof Error) {
+      return createResponse("INTERNAL_ERROR", `Failed to create dapp: ${error.message}`);
+    }
     return createResponse("INTERNAL_ERROR", "Failed to create dapp");
   }
 }
@@ -86,10 +163,10 @@ export async function PUT(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage DApps");
     }
 
-    const { id, url, balance } = await req.json();
+    const { id, url, balance, terminationDate, active } = await req.json();
 
     const updateData: any = {
       id,
@@ -97,6 +174,14 @@ export async function PUT(req: NextRequest) {
 
     if (url) {
       updateData.url = url;
+    }
+
+    if (terminationDate) {
+      updateData.terminationDate = terminationDate;
+    }
+
+    if (typeof active === "boolean") {
+      updateData.active = active;
     }
 
     if (balance) {
@@ -126,7 +211,7 @@ export async function PUT(req: NextRequest) {
       data: updateData,
     });
 
-    return NextResponse.json({
+    return createResponse("SUCCESS", {
       ...dapp,
       balance: ethers.formatUnits(dapp.balance),
     });
@@ -142,7 +227,7 @@ export async function DELETE(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage DApps");
     }
 
     const { id } = await req.json();
@@ -153,7 +238,7 @@ export async function DELETE(req: NextRequest) {
       },
     });
 
-    return NextResponse.json({ message: "Dapp deleted" });
+    return createResponse("SUCCESS", { message: "Dapp deleted" });
   } catch (error) {
     console.error("Error deleting dapp:", JSON.stringify(error));
     return createResponse("INTERNAL_ERROR", "Failed to delete dapp");
@@ -178,6 +263,16 @@ const verifyDapp = (dapp: Dapp) => {
     return false;
   }
   if (
+    dapp.contracts &&
+    dapp.contracts.some(
+      (contract) =>
+        contract.hasSwap &&
+        (!contract.swapAddress || !ethers.isAddress(contract.swapAddress))
+    )
+  ) {
+    return false;
+  }
+  if (
     dapp.senders &&
     dapp.senders.length !== 0 &&
     !dapp.senders.every((sender) => ethers.isAddress(sender.address))
@@ -189,9 +284,9 @@ const verifyDapp = (dapp: Dapp) => {
 
 const isValidHttpUrl = (urlStr: string) => {
   try {
-    new URL(urlStr);
-  } catch (_) {
+    const url = new URL(urlStr);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
     return false;
   }
-  return true;
 };

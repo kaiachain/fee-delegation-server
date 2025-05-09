@@ -22,7 +22,7 @@ export async function GET(req: NextRequest) {
         where: { address },
       });
       if (!sender) {
-        return createResponse("BAD_REQUEST", "Address not found");
+        return createResponse("NOT_FOUND", "Address not found");
       }
       const dapp = await prisma.dApp.findUnique({
         select: { balance: true },
