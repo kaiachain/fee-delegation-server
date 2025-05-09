@@ -185,11 +185,11 @@ export const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
 
 // ABI Definitions for swap validation
 const multicallAbi = [
-  "function multicall(uint256 deadline, bytes[] data)"
+  "function multicall(uint256 deadline, bytes[] data) payable returns (bytes[])"
 ];
 
 const exactInputSingleAbi = [
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96))"
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
 ];
 
 export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boolean> => {
