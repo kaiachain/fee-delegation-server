@@ -16,11 +16,18 @@ const RESPONSE_MAP: {
   METHOD_NOT_ALLOWED: { message: "Method not allowed", status: 405 },
   INTERNAL_ERROR: { message: "Internal server error", status: 500 },
   NOT_FOUND: { message: "Resource not found", status: 404 },
+  CONFLICT: { message: "Resource already exists", status: 409 },
+  UNAUTHORIZED: { message: "Unauthorized access", status: 401 },
 };
 
 export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: any) => {
   const { message, status } = RESPONSE_MAP[type];
-  return NextResponse.json({ message, data }, { status });
+  return NextResponse.json({ 
+    message, 
+    data,
+    error: type !== "SUCCESS" ? type : undefined,
+    status: type === "SUCCESS"
+  }, { status });
 };
 
 export const fetchData = async (
@@ -47,10 +54,11 @@ export const fetchData = async (
 
     const data = await response.json();
     if (!response.status.toString().startsWith("2")) {
-      alert("API request failed:");
       console.error("API request failed:", data);
       return {
         status: false,
+        error: data.error || "INTERNAL_ERROR",
+        message: data.message || "An error occurred while processing your request."
       };
     }
     return {
@@ -59,7 +67,50 @@ export const fetchData = async (
     };
   } catch (error) {
     console.error("API request error:", error);
-    throw error;
+    return {
+      status: false,
+      error: "INTERNAL_ERROR",
+      message: "An unexpected error occurred. Please try again."
+    };
+  }
+};
+
+export const fetchPublicData = async (
+  url: string,
+  options: any = {}
+) => {
+  const headers = {
+    "Content-Type": "application/json",
+    ...options.headers,
+  };
+
+  try {
+    const response = await fetch(`${API_URL}${url}`, {
+      method: options.method || "GET",
+      headers: headers,
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+
+    const data = await response.json();
+    if (!response.status.toString().startsWith("2")) {
+      console.error("API request failed:", data);
+      return {
+        status: false,
+        error: data.error || "INTERNAL_ERROR",
+        message: data.message || "An error occurred while processing your request."
+      };
+    }
+    return {
+      ...data,
+      status: true,
+    };
+  } catch (error) {
+    console.error("API request error:", error);
+    return {
+      status: false,
+      error: "INTERNAL_ERROR",
+      message: "An unexpected error occurred. Please try again."
+    };
   }
 };
 
@@ -94,15 +145,17 @@ export const checkWhitelistedSender = async (address: string) => {
 
 export const getDappfromContract = async (address: string) => {
   const contract = await prisma.contract.findUnique({
-    where: { address },
+    where: { address }
   });
   if (!contract) {
     return null;
   }
-  const dapp = await prisma.dApp.findUnique({
+  return await prisma.dApp.findUnique({
     where: { id: contract?.dappId },
+    include: {
+      contracts: true,
+    },
   });
-  return dapp;
 };
 
 export const getDappfromSender = async (address: string) => {
@@ -112,10 +165,9 @@ export const getDappfromSender = async (address: string) => {
   if (!sender) {
     return null;
   }
-  const dapp = await prisma.dApp.findUnique({
-    where: { id: sender?.dappId },
+  return await prisma.dApp.findUnique({
+    where: { id: sender?.dappId }
   });
-  return dapp;
 };
 
 export const isEnoughBalance = (balance: bigint) => {
@@ -129,4 +181,51 @@ export const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
     where: { id: dapp.id },
     data: { balance: balance.toString(), totalUsed: totalUsed.toString() },
   });
+};
+
+// ABI Definitions for swap validation
+const multicallAbi = [
+  "function multicall(uint256 deadline, bytes[] data)"
+];
+
+const exactInputSingleAbi = [
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96))"
+];
+
+export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boolean> => {
+  console.log("validateSwapTransaction");
+  try {
+    if (!dapp.contracts?.some((contract: any) => contract.hasSwap)) {
+      console.log("Not a swap transaction, proceed");
+      return true; // Not a swap transaction, proceed
+    }
+
+    const toAddress = tx.to?.toLowerCase();
+    const swapContract = dapp.contracts.find((contract: any) => 
+      contract.hasSwap && contract.address.toLowerCase() === toAddress
+    );
+
+    if (!swapContract) {
+      console.log("No swap contract found, proceed");
+      return true; // Not a swap transaction, proceed
+    }
+
+    // Parse interfaces
+    const multicallIface = new ethers.Interface(multicallAbi);
+    const exactInputIface = new ethers.Interface(exactInputSingleAbi);
+
+    // Decode multicall
+    const { data } = multicallIface.decodeFunctionData("multicall", tx.data);
+
+    // Decode inner call
+    const innerCallData = data[0];
+    const [params] = exactInputIface.decodeFunctionData("exactInputSingle", innerCallData);
+
+    console.log(params.tokenOut.toLowerCase(),swapContract.swapAddress?.toLowerCase())
+    // Check if the token out matches the dapp's swap address
+    return params.tokenOut.toLowerCase() === swapContract.swapAddress?.toLowerCase();
+  } catch (error) {
+    console.error("Failed to validate swap transaction:", error);
+    return false;
+  }
 };

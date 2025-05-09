@@ -10,10 +10,10 @@ export async function POST(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage contracts");
     }
 
-    const { dappId, address } = await req.json();
+    const { dappId, address, hasSwap, swapAddress } = await req.json();
 
     if (!dappId || !address) {
       return createResponse(
@@ -24,6 +24,11 @@ export async function POST(req: NextRequest) {
 
     if (ethers.isAddress(address) === false) {
       return createResponse("BAD_REQUEST", "Invalid address");
+    }
+
+    // Validate swap address if hasSwap is true
+    if (hasSwap && (!swapAddress || !ethers.isAddress(swapAddress))) {
+      return createResponse("BAD_REQUEST", "Invalid swap address");
     }
 
     if (
@@ -40,6 +45,8 @@ export async function POST(req: NextRequest) {
       data: {
         address: address.toLowerCase(),
         dappId,
+        hasSwap: hasSwap || false,
+        swapAddress: hasSwap ? swapAddress.toLowerCase() : null,
       },
     });
 
@@ -56,7 +63,7 @@ export async function DELETE(req: NextRequest) {
       req.headers.get("Authorization")?.split(" ")[1] || ""
     );
     if (role !== "editor") {
-      return createResponse("INTERNAL_ERROR", "Unauthorized");
+      return createResponse("UNAUTHORIZED", "You don't have permission to manage contracts");
     }
 
     const { id } = await req.json();

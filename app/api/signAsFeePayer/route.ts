@@ -8,8 +8,17 @@ import {
   getDappfromSender,
   isEnoughBalance,
   updateDappWithFee,
+  validateSwapTransaction,
 } from "@/lib/apiUtils";
 import pickProviderFromPool from "@/lib/rpcProvider";
+import { DApp, Contract as PrismaContract } from "@prisma/client";
+
+// ABI Definitions
+const multicallAbi = ["function multicall(uint256 deadline, bytes[] data)"];
+
+const exactInputSingleAbi = [
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96))",
+];
 
 export async function POST(req: NextRequest) {
   try {
@@ -61,11 +70,54 @@ export async function POST(req: NextRequest) {
         return createResponse("BAD_REQUEST", "Address not found");
       }
 
+      const dappWithContracts = dapp as unknown as DApp & {
+        contracts: PrismaContract[];
+      };
+
+      console.log(dappWithContracts);
+
+      // Check if DApp is active
+      if (!dapp.active) {
+        return createResponse(
+          "BAD_REQUEST",
+          "DApp is inactive. Please contact the administrator to activate the DApp."
+        );
+      }
+
       if (!isEnoughBalance(BigInt(dapp.balance ?? 0))) {
         return createResponse(
           "BAD_REQUEST",
           "Insufficient balance in fee delegation server, please contact us"
         );
+      }
+
+      // Check if the transaction is a swap transaction
+      const isValidSwap = await validateSwapTransaction(dappWithContracts, tx);
+      if (!isValidSwap) {
+        return createResponse(
+          "BAD_REQUEST",
+          "Swap token address is not whitelisted"
+        );
+      }
+
+      // Check if the Dapp has a termination date
+      if (dapp.terminationDate) {
+        const terminationDate = new Date(dapp.terminationDate);
+        const now = new Date();
+        // Convert both dates to KST (UTC+9)
+        const kstTerminationDate = new Date(terminationDate.getTime() + (9 * 60 * 60 * 1000));
+        const kstNow = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+        
+        // Add one day to termination date to make it exclusive
+        const nextDayAfterTermination = new Date(kstTerminationDate);
+        nextDayAfterTermination.setDate(nextDayAfterTermination.getDate() + 1);
+        
+        if (kstNow >= nextDayAfterTermination) {
+          return createResponse(
+            "BAD_REQUEST",
+            "DApp is terminated. Please contact the administrator to activate the DApp."
+          );
+        }
       }
     }
 
