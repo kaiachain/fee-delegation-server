@@ -112,18 +112,20 @@ export default function NavBar() {
 
           {/* Right Section - Navigation Links and User Profile */}
           <div className="flex items-center space-x-6">
-            {/* KST Clock */}
-            <div className="hidden md:flex items-center space-x-2 bg-gray-800/50 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
-              <div className="p-1.5 bg-blue-50 rounded-md">
-                <svg className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+            {/* KST Clock - Only show for logged in users */}
+            {status === "authenticated" && (
+              <div className="hidden md:flex items-center space-x-2 bg-gray-800/50 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-700">
+                <div className="p-1.5 bg-blue-50 rounded-md">
+                  <svg className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-xs text-gray-400">KST</span>
+                  <span className="text-sm font-mono text-blue-400">{currentTime}</span>
+                </div>
               </div>
-              <div className="flex flex-col">
-                <span className="text-xs text-gray-400">KST</span>
-                <span className="text-sm font-mono text-blue-400">{currentTime}</span>
-              </div>
-            </div>
+            )}
 
             {/* Navigation Links */}
             <nav className="hidden md:flex space-x-4">
