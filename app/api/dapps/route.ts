@@ -150,7 +150,6 @@ export async function POST(req: NextRequest) {
         totalUsed: ethers.formatUnits(dapp.totalUsed),
       });
     } catch (error: any) {
-      console.log(error);
       if (error.code === 'P2002') {
         return createResponse("CONFLICT", "A DApp with this name or address combination already exists");
       }

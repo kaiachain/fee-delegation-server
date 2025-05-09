@@ -463,7 +463,7 @@ export default function AddDappModal({
                         value={swapAddress}
                         onChange={(e) => setSwapAddress(e.target.value)}
                         className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
-                        placeholder="Enter swap TO Token address"
+                        placeholder="Enter swap IN/OUT Token address"
                       />
                     )}
                   </div>
@@ -486,7 +486,7 @@ export default function AddDappModal({
                           <div className="text-sm font-mono text-gray-900">{contract.address}</div>
                           {contract.hasSwap && contract.swapAddress && (
                             <div className="text-xs text-gray-500 mt-1">
-                              Swap to: {contract.swapAddress}
+                              Swap IN/OUT: {contract.swapAddress}
                             </div>
                           )}
                         </div>

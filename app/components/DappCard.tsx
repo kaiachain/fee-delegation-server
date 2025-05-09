@@ -494,7 +494,7 @@ const DappCard: React.FC<DappCardProps> = ({ dapp, children }) => {
                   </button>
                   {contract.hasSwap && contract.swapAddress && (
                     <div className="absolute left-0 top-full mt-1 w-full bg-white rounded-lg shadow-lg border border-gray-200 p-2 z-10 hidden group-hover:block">
-                      <div className="text-xs text-gray-500">Swap TO:</div>
+                      <div className="text-xs text-gray-500">Swap IN/OUT:</div>
                       <div className="text-sm font-mono text-gray-700 truncate">{contract.swapAddress}</div>
                     </div>
                   )}

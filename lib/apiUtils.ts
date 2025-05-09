@@ -193,7 +193,6 @@ const exactInputSingleAbi = [
 ];
 
 export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boolean> => {
-  console.log("validateSwapTransaction");
   try {
     if (!dapp.contracts?.some((contract: any) => contract.hasSwap)) {
       console.log("Not a swap transaction, proceed");
@@ -221,9 +220,9 @@ export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boole
     const innerCallData = data[0];
     const [params] = exactInputIface.decodeFunctionData("exactInputSingle", innerCallData);
 
-    console.log(params.tokenOut.toLowerCase(),swapContract.swapAddress?.toLowerCase())
-    // Check if the token out matches the dapp's swap address
-    return params.tokenOut.toLowerCase() === swapContract.swapAddress?.toLowerCase();
+    // Check if the token in/out matches the dapp's swap address
+    return (params.tokenOut.toLowerCase() === swapContract.swapAddress?.toLowerCase() ||
+    params.tokenIn.toLowerCase() === swapContract.swapAddress?.toLowerCase());
   } catch (error) {
     console.error("Failed to validate swap transaction:", error);
     return false;
