@@ -8,10 +8,18 @@ import { Dapp } from "@/types";
 export async function GET() {
   try {
     const dapps = await prisma.dApp.findMany({
-      include: {
-        contracts: true,
-        senders: true,
+      select: {
+        id: true,
+        name: true,
+        url: true,
+        balance: true,
+        totalUsed: true,
+        active: true,
+        createdAt: true
       },
+      where: {
+        active: true
+      }
     });
 
     const formattedDapps = dapps.map((dapp) => ({
