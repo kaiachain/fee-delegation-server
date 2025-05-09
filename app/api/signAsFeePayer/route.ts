@@ -13,13 +13,6 @@ import {
 import pickProviderFromPool from "@/lib/rpcProvider";
 import { DApp, Contract as PrismaContract } from "@prisma/client";
 
-// ABI Definitions
-const multicallAbi = ["function multicall(uint256 deadline, bytes[] data)"];
-
-const exactInputSingleAbi = [
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96))",
-];
-
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -73,8 +66,6 @@ export async function POST(req: NextRequest) {
       const dappWithContracts = dapp as unknown as DApp & {
         contracts: PrismaContract[];
       };
-
-      console.log(dappWithContracts);
 
       // Check if DApp is active
       if (!dapp.active) {

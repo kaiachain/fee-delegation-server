@@ -97,7 +97,7 @@ export default function ConfirmModal({
                 <span className="text-sm font-semibold text-purple-700">Swap Information</span>
               </div>
               <div className="flex flex-col space-y-2">
-                <span className="text-sm font-medium text-purple-600">Swap TO Token:</span>
+                <span className="text-sm font-medium text-purple-600">Swap IN/OUT Token:</span>
                 <div className="bg-purple-100 rounded-md p-2">
                   <code className="text-sm font-mono text-purple-800 break-all">
                     {swapAddress}

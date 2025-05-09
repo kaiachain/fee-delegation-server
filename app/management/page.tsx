@@ -27,7 +27,7 @@ export default function Management() {
   });
 
   const getDapps = async () => {
-    const result = await fetchData("/dapps", { method: "GET" }, session);
+    const result = await fetchData("/dapps/management", { method: "GET" }, session);
     if (!result.status) {
       console.error("Failed to fetch DApps:", result.message);
       return [];

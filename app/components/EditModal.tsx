@@ -92,7 +92,7 @@ export default function EditModal({
                 <div className="pl-4 border-l-2 border-gray-200">
                   <input
                     type="text"
-                    placeholder="Enter swap TO Token address"
+                    placeholder="Enter swap IN/OUT Token address"
                     value={swapAddress}
                     onChange={(e) => setSwapAddress(e.target.value)}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
