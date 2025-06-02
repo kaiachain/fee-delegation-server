@@ -34,7 +34,7 @@ export default function NavBar() {
       minute: "2-digit",
       second: "2-digit",
       hour12: false
-    }));
+    }).replace(/\s/g, '')); // Remove all spaces
   };
 
   const getPoolBalance = async () => {

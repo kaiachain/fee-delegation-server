@@ -3,22 +3,33 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider = "sqlite"
+  url      = "file:./dev.db"
 }
 
 model DApp {
-  id              String   @id @default(cuid())
-  name            String   @unique
+  id              String     @id @default(cuid())
+  name            String     @unique
   url             String
-  balance         String   @default("0")
-  totalUsed       String   @default("0")
-  terminationDate String?
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now())
+  balance         String     @default("0")
+  totalUsed       String     @default("0")
+  createdAt       DateTime   @default(now())
+  active          Boolean    @default(true)
+  terminationDate String?    @db.Text
+  contracts       Contract[]
+  senders         Sender[]
+  apiKeys         ApiKey[]
+}
 
-  contracts Contract[]
-  senders   Sender[]
+model ApiKey {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  dapp      DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId    String
+  createdAt DateTime @default(now())
+
+  @@index([dappId], map: "ApiKey_dappId_fkey")
 }
 
 model Contract {
@@ -30,7 +41,7 @@ model Contract {
   dappId      String
   createdAt   DateTime @default(now())
 
-  @@index([dappId])
+  @@index([dappId], map: "Contract_dappId_fkey")
 }
 
 model Sender {
@@ -38,4 +49,6 @@ model Sender {
   address   String @unique
   dappId    String
   dapp      DApp    @relation(fields: [dappId], references: [id], onDelete: Cascade)
+
+  @@index([dappId], map: "Sender_dappId_fkey")
 }

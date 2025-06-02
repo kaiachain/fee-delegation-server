@@ -36,6 +36,14 @@ export async function GET(req: NextRequest) {
             id: true,
             address: true
           }
+        },
+        apiKeys: {
+          select: {
+            id: true,
+            key: true,
+            name: true,
+            createdAt: true
+          }
         }
       }
     });

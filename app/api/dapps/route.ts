@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { ethers } from "ethers";
 import { createResponse, formattedBalance } from "@/lib/apiUtils";
 import { verify } from "@/lib/verifyToken";
-import { Dapp } from "@/types";
+import { Dapp, Contract, Sender, ApiKey } from "@/app/types/index";
 
 export async function GET() {
   try {
@@ -14,14 +14,12 @@ export async function GET() {
         url: true,
         balance: true,
         totalUsed: true,
-        active: true,
         createdAt: true
       },
       where: {
         active: true
       }
     });
-
     const formattedDapps = dapps.map((dapp) => ({
       ...dapp,
       totalUsed: formattedBalance(dapp.totalUsed),
@@ -54,6 +52,12 @@ type CreateDAppData = {
       address: string;
     }>;
   };
+  apiKeys: {
+    create: Array<{
+      key: string;
+      name: string;
+    }>;
+  };
 };
 
 export async function POST(req: NextRequest) {
@@ -65,7 +69,7 @@ export async function POST(req: NextRequest) {
       return createResponse("UNAUTHORIZED", "You don't have permission to create DApps");
     }
 
-    const { name, url, balance, terminationDate, contracts, senders } = await req.json();
+    const { name, url, balance, terminationDate, contracts, senders, apiKeys } = await req.json();
 
     // Validate required fields
     if (!name || !url) {
@@ -73,8 +77,8 @@ export async function POST(req: NextRequest) {
     }
 
     // Validate arrays
-    if (!Array.isArray(contracts) || !Array.isArray(senders)) {
-      return createResponse("BAD_REQUEST", "Contracts and senders must be arrays");
+    if (!Array.isArray(contracts) || !Array.isArray(senders) || !Array.isArray(apiKeys)) {
+      return createResponse("BAD_REQUEST", "Contracts, senders, and apiKeys must be arrays");
     }
 
     // Prepare data with proper types
@@ -85,15 +89,21 @@ export async function POST(req: NextRequest) {
       balance: "0",
       totalUsed: "0",
       contracts: {
-        create: contracts.map((contract) => ({
+        create: contracts.map((contract: Contract) => ({
           address: contract.address,
           hasSwap: contract.hasSwap || false,
           swapAddress: contract.swapAddress || null,
         })),
       },
       senders: {
-        create: senders.map((sender) => ({
+        create: senders.map((sender: Sender) => ({
           address: sender.address,
+        })),
+      },
+      apiKeys: {
+        create: apiKeys.map((apiKey: ApiKey) => ({
+          key: apiKey.key,
+          name: apiKey.name,
         })),
       },
     };
@@ -106,6 +116,7 @@ export async function POST(req: NextRequest) {
       terminationDate,
       contracts,
       senders,
+      apiKeys,
     })) {
       return createResponse("BAD_REQUEST", "Invalid DApp data. Please check all fields.");
     }
@@ -141,6 +152,7 @@ export async function POST(req: NextRequest) {
         include: {
           contracts: true,
           senders: true,
+          apiKeys: true,
         },
       });
 
@@ -283,6 +295,13 @@ const verifyDapp = (dapp: Dapp) => {
     dapp.senders &&
     dapp.senders.length !== 0 &&
     !dapp.senders.every((sender) => ethers.isAddress(sender.address))
+  ) {
+    return false;
+  }
+  if (
+    dapp.apiKeys &&
+    dapp.apiKeys.length !== 0 &&
+    !dapp.apiKeys.every((apiKey) => apiKey.key && apiKey.name)
   ) {
     return false;
   }

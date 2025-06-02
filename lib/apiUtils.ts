@@ -194,6 +194,11 @@ const exactInputSingleAbi = [
 
 export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boolean> => {
   try {
+    if(dapp.name === "DragonSwap" || dapp.name === "Capybara") {
+      console.log(dapp.name + " validateSwapTransaction Details:");
+      console.log(JSON.stringify(tx));
+    }
+
     if (!dapp.contracts?.some((contract: any) => contract.hasSwap)) {
       console.log("Not a swap transaction, proceed");
       return true; // Not a swap transaction, proceed

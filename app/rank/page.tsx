@@ -13,7 +13,7 @@ export default function Page() {
         console.error("Failed to fetch DApps:", result.message);
         return [];
       }
-      return result.data.filter((dapp: any) => dapp.active);
+      return result.data;
     } catch (error) {
       console.error("Error fetching DApps:", error);
       return [];
