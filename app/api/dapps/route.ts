@@ -20,7 +20,7 @@ export async function GET() {
         active: true
       }
     });
-    const formattedDapps = dapps.map((dapp) => ({
+    const formattedDapps = dapps.map((dapp: any) => ({
       ...dapp,
       totalUsed: formattedBalance(dapp.totalUsed),
       balance: formattedBalance(dapp.balance),

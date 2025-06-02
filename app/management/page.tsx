@@ -6,7 +6,7 @@ import DelDappBtn from "../components/DelDappBtn";
 import { fetchData } from "@/lib/apiUtils";
 import { useSession, signOut } from "next-auth/react";
 import AddDappBtn from "../components/AddDappBtn";
-import { Dapp } from "@/types";
+import { Dapp } from "../types";
 import Modal from "react-modal";
 
 export default function Management() {

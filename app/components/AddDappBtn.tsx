@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import AddDappModal from "./AddDappModal";
-import { Dapp } from "@/types";
+import { Dapp } from "../types";
 
 interface AddDappBtnProps {
   onDappAdd: (dapp: Dapp) => void;
