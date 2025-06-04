@@ -230,14 +230,16 @@ export async function POST(req: NextRequest) {
 }
 
 const settlement = async (dapp: any, receipt: any) => {
-  if (dapp) {
-    if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
-      const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
-      await updateDappWithFee(dapp, usedFee);
+  if (process.env.NETWORK === "mainnet") {
+    if (dapp) {
+      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
+        const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
+        await updateDappWithFee(dapp, usedFee);
+      } else {
+        throw new Error("field missing in receipt:" + JSON.stringify(receipt));
+      }
     } else {
-      throw new Error("field missing in receipt:" + JSON.stringify(receipt));
+      throw new Error("Settlement failed");
     }
-  } else {
-    throw new Error("Settlement failed");
   }
 };
