@@ -14,6 +14,11 @@ import { getDappByApiKey } from "@/lib/dappUtils";
 import pickProviderFromPool from "@/lib/rpcProvider";
 import { DApp, Contract as PrismaContract } from "@prisma/client";
 
+// Handle preflight OPTIONS request
+export async function OPTIONS() {
+  return createResponse("SUCCESS", {});
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();

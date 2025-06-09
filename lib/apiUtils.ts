@@ -27,7 +27,15 @@ export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: any) => {
     data,
     error: type !== "SUCCESS" ? type : undefined,
     status: type === "SUCCESS"
-  }, { status });
+  }, { 
+    status,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+      'Content-Type': 'application/json',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+    }
+  });
 };
 
 export const fetchData = async (
