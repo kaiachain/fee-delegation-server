@@ -22,20 +22,23 @@ const RESPONSE_MAP: {
 
 export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: any) => {
   const { message, status } = RESPONSE_MAP[type];
-  return NextResponse.json({ 
-    message, 
-    data,
-    error: type !== "SUCCESS" ? type : undefined,
-    status: type === "SUCCESS"
-  }, { 
-    status,
-    headers: {
-      'Access-Control-Allow-Origin': '*',
-      'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-      'Content-Type': 'application/json',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+  return NextResponse.json(
+    {
+      message,
+      data,
+      error: type !== "SUCCESS" ? type : undefined,
+      status: type === "SUCCESS",
+    },
+    {
+      status,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Content-Type": "application/json",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+      },
     }
-  });
+  );
 };
 
 export const fetchData = async (
@@ -66,7 +69,8 @@ export const fetchData = async (
       return {
         status: false,
         error: data.error || "INTERNAL_ERROR",
-        message: data.message || "An error occurred while processing your request."
+        message:
+          data.message || "An error occurred while processing your request.",
       };
     }
     return {
@@ -78,15 +82,12 @@ export const fetchData = async (
     return {
       status: false,
       error: "INTERNAL_ERROR",
-      message: "An unexpected error occurred. Please try again."
+      message: "An unexpected error occurred. Please try again.",
     };
   }
 };
 
-export const fetchPublicData = async (
-  url: string,
-  options: any = {}
-) => {
+export const fetchPublicData = async (url: string, options: any = {}) => {
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -105,7 +106,8 @@ export const fetchPublicData = async (
       return {
         status: false,
         error: data.error || "INTERNAL_ERROR",
-        message: data.message || "An error occurred while processing your request."
+        message:
+          data.message || "An error occurred while processing your request.",
       };
     }
     return {
@@ -117,7 +119,7 @@ export const fetchPublicData = async (
     return {
       status: false,
       error: "INTERNAL_ERROR",
-      message: "An unexpected error occurred. Please try again."
+      message: "An unexpected error occurred. Please try again.",
     };
   }
 };
@@ -153,7 +155,7 @@ export const checkWhitelistedSender = async (address: string) => {
 
 export const getDappfromContract = async (address: string) => {
   const contract = await prisma.contract.findUnique({
-    where: { address }
+    where: { address },
   });
   if (!contract) {
     return null;
@@ -174,7 +176,7 @@ export const getDappfromSender = async (address: string) => {
     return null;
   }
   return await prisma.dApp.findUnique({
-    where: { id: sender?.dappId }
+    where: { id: sender?.dappId },
   });
 };
 
@@ -192,17 +194,25 @@ export const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
 };
 
 // ABI Definitions for swap validation
-const multicallAbi = [
-  "function multicall(uint256 deadline, bytes[] data) payable returns (bytes[])"
+const capybaraSwapAbi = [
+  "function multicall(uint256 deadline, bytes[] data)",
+  "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to)",
 ];
 
-const exactInputSingleAbi = [
-  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
-];
-
-export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boolean> => {
+export const validateSwapTransaction = async (
+  dapp: any,
+  tx: any
+): Promise<boolean> => {
   try {
-    if(dapp.name === "DragonSwap" || dapp.name === "Capybara") {
+    let isCapybaraSwap = false;
+    let isDragonSwap = false;
+    if (dapp?.name.toLowerCase() === "dragonswap") {
+      isDragonSwap = true;
+    } else if (dapp?.name.toLowerCase() === "capybara") {
+      isCapybaraSwap = true;
+    }
+
+    if (isDragonSwap || isCapybaraSwap) {
       console.log(dapp.name + " validateSwapTransaction Details:");
       console.log(JSON.stringify(tx));
     }
@@ -213,8 +223,9 @@ export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boole
     }
 
     const toAddress = tx.to?.toLowerCase();
-    const swapContract = dapp.contracts.find((contract: any) => 
-      contract.hasSwap && contract.address.toLowerCase() === toAddress
+    const swapContract = dapp.contracts.find(
+      (contract: any) =>
+        contract.hasSwap && contract.address.toLowerCase() === toAddress
     );
 
     if (!swapContract) {
@@ -222,20 +233,57 @@ export const validateSwapTransaction = async (dapp: any, tx: any): Promise<boole
       return true; // Not a swap transaction, proceed
     }
 
-    // Parse interfaces
-    const multicallIface = new ethers.Interface(multicallAbi);
-    const exactInputIface = new ethers.Interface(exactInputSingleAbi);
+    if (isCapybaraSwap) {
+      try {
+        const iface = new ethers.Interface(capybaraSwapAbi);
+        const decodedMulticall = iface.decodeFunctionData("multicall", tx.data);
+        const dataArray = decodedMulticall[1];
 
-    // Decode multicall
-    const { data } = multicallIface.decodeFunctionData("multicall", tx.data);
+        for (const call of dataArray) {
+          const selector = call.slice(0, 10);
 
-    // Decode inner call
-    const innerCallData = data[0];
-    const [params] = exactInputIface.decodeFunctionData("exactInputSingle", innerCallData);
+          switch (selector.toLowerCase()) {
+            case iface
+              .getFunction("swapExactTokensForTokens")
+              ?.selector.toLowerCase():
+              try {
+                const decoded = iface.decodeFunctionData(
+                  "swapExactTokensForTokens",
+                  call
+                );
+                const path = decoded.path || decoded[2];
+                const tokenIn = path[0];
+                const tokenOut = path[path.length - 1];
 
-    // Check if the token in/out matches the dapp's swap address
-    return (params.tokenOut.toLowerCase() === swapContract.swapAddress?.toLowerCase() ||
-    params.tokenIn.toLowerCase() === swapContract.swapAddress?.toLowerCase());
+                return (
+                  tokenOut.toLowerCase() ===
+                    swapContract.swapAddress?.toLowerCase() ||
+                  tokenIn.toLowerCase() ===
+                    swapContract.swapAddress?.toLowerCase()
+                );
+              } catch (err) {
+                console.error(
+                  "Failed to decode capybaraswap transaction:",
+                  err
+                );
+                return false;
+              }
+              break;
+
+            default:
+              console.error("Unknown selector:", selector);
+              return false;
+          }
+        }
+      } catch (error) {
+        console.error("Failed to validate capybaraswap transaction:", error);
+        return false;
+      }
+    } else if (isDragonSwap) {
+      return true;
+    }
+
+    return false;
   } catch (error) {
     console.error("Failed to validate swap transaction:", error);
     return false;
