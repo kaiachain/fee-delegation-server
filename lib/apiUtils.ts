@@ -194,9 +194,10 @@ export const updateDappWithFee = async (dapp: DApp, fee: bigint) => {
 };
 
 // ABI Definitions for swap validation
-const capybaraSwapAbi = [
+const swapAbi = [
   "function multicall(uint256 deadline, bytes[] data)",
   "function swapExactTokensForTokens(uint amountIn, uint amountOutMin, address[] path, address to)",
+  "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96))",
 ];
 
 export const validateSwapTransaction = async (
@@ -235,7 +236,7 @@ export const validateSwapTransaction = async (
 
     if (isCapybaraSwap) {
       try {
-        const iface = new ethers.Interface(capybaraSwapAbi);
+        const iface = new ethers.Interface(swapAbi);
         const decodedMulticall = iface.decodeFunctionData("multicall", tx.data);
         const dataArray = decodedMulticall[1];
 
@@ -246,6 +247,7 @@ export const validateSwapTransaction = async (
             case iface
               .getFunction("swapExactTokensForTokens")
               ?.selector.toLowerCase():
+              console.log("Executing swapExactTokensForTokens");
               try {
                 const decoded = iface.decodeFunctionData(
                   "swapExactTokensForTokens",
@@ -263,12 +265,35 @@ export const validateSwapTransaction = async (
                 );
               } catch (err) {
                 console.error(
-                  "Failed to decode capybaraswap transaction:",
+                  "Failed to decode swapExactTokensForTokens capybaraswap transaction:",
                   err
                 );
                 return false;
               }
-              break;
+
+            case iface.getFunction("exactInputSingle")?.selector.toLowerCase():
+              console.log("Executing exactInputSingle");
+              try {
+                const [params] = iface.decodeFunctionData(
+                  "exactInputSingle",
+                  call
+                );
+                const tokenIn = params.tokenIn;
+                const tokenOut = params.tokenOut;
+
+                return (
+                  tokenOut.toLowerCase() ===
+                    swapContract.swapAddress?.toLowerCase() ||
+                  tokenIn.toLowerCase() ===
+                    swapContract.swapAddress?.toLowerCase()
+                );
+              } catch (err) {
+                console.error(
+                  "Failed to decode exactInputSingle capybaraswap transaction:",
+                  err
+                );
+                return false;
+              }
 
             default:
               console.error("Unknown selector:", selector);
