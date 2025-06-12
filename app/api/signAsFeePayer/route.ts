@@ -52,6 +52,7 @@ export async function POST(req: NextRequest) {
 
     // if it's testnet, allow all transactions
     if (process.env.NETWORK === "mainnet") {
+      console.log(JSON.stringify(tx));
       // First check if API key is present and valid
       if (apiKey) {
         dapp = await getDappByApiKey(apiKey);
