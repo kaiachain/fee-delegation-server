@@ -19,10 +19,11 @@ export async function POST(req: NextRequest) {
       return createResponse("BAD_REQUEST", "Invalid sender address");
     }
 
-    // Check if sender exists
-    const existingSender = await prisma.sender.findUnique({
+    // Check if sender exists (only active senders)
+    const existingSender = await prisma.sender.findFirst({
       where: {
-        address: address.toLowerCase()
+        address: address.toLowerCase(),
+        active: true
       }
     });
 

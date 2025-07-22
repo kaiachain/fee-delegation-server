@@ -38,13 +38,8 @@ export async function POST(req: NextRequest) {
       return createResponse("NOT_FOUND", "DApp not found");
     }
 
-    // Check if DApp has any contracts or senders
-    if (dapp.contracts.length > 0 || dapp.senders.length > 0) {
-      return createResponse(
-        "BAD_REQUEST",
-        "Cannot add API key to a DApp with existing contracts or senders"
-      );
-    }
+    // Note: API keys and transaction filters can now coexist
+    // No validation needed here
 
     const newApiKey = await prisma.apiKey.create({
       data: {
@@ -99,16 +94,14 @@ export async function DELETE(req: NextRequest) {
       return createResponse("NOT_FOUND", "API key not found");
     }
 
-    // Check if DApp has any contracts or senders
-    if (apiKey.dapp.contracts.length > 0 || apiKey.dapp.senders.length > 0) {
-      return createResponse(
-        "BAD_REQUEST",
-        "Cannot delete API key from a DApp with existing contracts or senders"
-      );
-    }
+    // Note: API keys and transaction filters can now coexist
+    // No validation needed here
 
-    await prisma.apiKey.delete({
+    await prisma.apiKey.update({
       where: { id },
+      data: {
+        active: false,
+      },
     });
 
     return createResponse("SUCCESS", { message: "API key deleted successfully" });

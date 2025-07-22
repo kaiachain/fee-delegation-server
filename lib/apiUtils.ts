@@ -20,7 +20,7 @@ const RESPONSE_MAP: {
   UNAUTHORIZED: { message: "Unauthorized access", status: 401 },
 };
 
-export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: any) => {
+export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: unknown) => {
   const { message, status } = RESPONSE_MAP[type];
   return NextResponse.json(
     {
@@ -43,7 +43,7 @@ export const createResponse = (type: keyof typeof RESPONSE_MAP, data?: any) => {
 
 export const fetchData = async (
   url: string,
-  options: any = {},
+  options: { method?: string; headers?: Record<string, string>; body?: unknown } = {},
   session: Session | null
 ) => {
   if (!session) {
@@ -70,7 +70,7 @@ export const fetchData = async (
         status: false,
         error: data.error || "INTERNAL_ERROR",
         message:
-          data.message || "An error occurred while processing your request.",
+          data.data || data.message || "An error occurred while processing your request.",
       };
     }
     return {
@@ -87,7 +87,7 @@ export const fetchData = async (
   }
 };
 
-export const fetchPublicData = async (url: string, options: any = {}) => {
+export const fetchPublicData = async (url: string, options: { method?: string; headers?: Record<string, string>; body?: unknown } = {}) => {
   const headers = {
     "Content-Type": "application/json",
     ...options.headers,
@@ -131,53 +131,111 @@ export const formattedBalance = (balance: string): string => {
   ).toFixed(5);
 };
 
-export const checkWhitelistedContract = async (address: string) => {
+export const checkWhitelistedContractsWithoutAPIkey = async (address: string) => {
   if (!address) {
     return false;
   }
-  const contract = await prisma.contract.findUnique({
-    where: { address },
-    select: { address: true },
+  const contract = await prisma.contract.findFirst({
+    where: { 
+      address,
+      active: true 
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
   });
-  return !!contract;
+  
+  // Return false if contract doesn't exist or if DApp has API keys configured
+  if (!contract || (contract.dapp.apiKeys && contract.dapp.apiKeys.length > 0)) {
+    return false;
+  }
+  
+  return true;
 };
 
-export const checkWhitelistedSender = async (address: string) => {
+export const checkWhitelistedSendersWithoutAPIkey = async (address: string) => {
   if (!address) {
     return false;
   }
-  const sender = await prisma.sender.findUnique({
-    where: { address },
-    select: { address: true },
+  const sender = await prisma.sender.findFirst({
+    where: { 
+      address,
+      active: true 
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
   });
-  return !!sender;
+  
+  // Return false if sender doesn't exist or if DApp has API keys configured
+  if (!sender || (sender.dapp.apiKeys && sender.dapp.apiKeys.length > 0)) {
+    return false;
+  }
+  
+  return true;
 };
 
 export const getDappfromContract = async (address: string) => {
-  const contract = await prisma.contract.findUnique({
-    where: { address },
+  const contract = await prisma.contract.findFirst({
+    where: { 
+      address,
+      active: true 
+    },
   });
   if (!contract) {
     return null;
   }
-  return await prisma.dApp.findUnique({
+  
+  // Get DApp and check if it has API keys configured
+  const dapp = await prisma.dApp.findUnique({
     where: { id: contract?.dappId },
     include: {
       contracts: true,
+      apiKeys: true,
     },
   });
+  
+  // Skip DApps that have API keys configured
+  if (dapp && dapp.apiKeys && dapp.apiKeys.length > 0) {
+    return null;
+  }
+  
+  return dapp;
 };
 
 export const getDappfromSender = async (address: string) => {
-  const sender = await prisma.sender.findUnique({
-    where: { address },
+  const sender = await prisma.sender.findFirst({
+    where: { 
+      address,
+      active: true 
+    },
   });
   if (!sender) {
     return null;
   }
-  return await prisma.dApp.findUnique({
+  
+  // Get DApp and check if it has API keys configured
+  const dapp = await prisma.dApp.findUnique({
     where: { id: sender?.dappId },
+    include: {
+      apiKeys: true,
+    },
   });
+  
+  // Skip DApps that have API keys configured
+  if (dapp && dapp.apiKeys && dapp.apiKeys.length > 0) {
+    return null;
+  }
+  
+  return dapp;
 };
 
 export const isEnoughBalance = (balance: bigint) => {
@@ -201,31 +259,31 @@ const swapAbi = [
 ];
 
 export const validateSwapTransaction = async (
-  dapp: any,
-  tx: any
+  dapp: { name?: string; contracts?: Array<{ hasSwap: boolean; address: string; swapAddress?: string }> },
+  tx: { to?: string; data?: string }
 ): Promise<boolean> => {
   try {
     let isCapybaraSwap = false;
     let isDragonSwap = false;
-    if (dapp?.name.toLowerCase() === "dragonswap") {
+    if (dapp?.name?.toLowerCase() === "dragonswap") {
       isDragonSwap = true;
-    } else if (dapp?.name.toLowerCase() === "capybara") {
+    } else if (dapp?.name?.toLowerCase() === "capybara") {
       isCapybaraSwap = true;
     }
 
     if (isDragonSwap || isCapybaraSwap) {
-      console.log(dapp.name + " validateSwapTransaction Details:");
+      console.log((dapp.name || "Unknown") + " validateSwapTransaction Details:");
       console.log(JSON.stringify(tx));
     }
 
-    if (!dapp.contracts?.some((contract: any) => contract.hasSwap)) {
+    if (!dapp.contracts?.some((contract) => contract.hasSwap)) {
       console.log("Not a swap transaction, proceed");
       return true; // Not a swap transaction, proceed
     }
 
     const toAddress = tx.to?.toLowerCase();
     const swapContract = dapp.contracts.find(
-      (contract: any) =>
+      (contract) =>
         contract.hasSwap && contract.address.toLowerCase() === toAddress
     );
 
@@ -237,7 +295,7 @@ export const validateSwapTransaction = async (
     if (isCapybaraSwap) {
       try {
         const iface = new ethers.Interface(swapAbi);
-        const decodedMulticall = iface.decodeFunctionData("multicall", tx.data);
+        const decodedMulticall = iface.decodeFunctionData("multicall", tx.data || "");
         const dataArray = decodedMulticall[1];
 
         for (const call of dataArray) {
@@ -313,4 +371,168 @@ export const validateSwapTransaction = async (
     console.error("Failed to validate swap transaction:", error);
     return false;
   }
+};
+
+export const checkWhitelistedAndGetDapp = async (targetContract: string, sender: string) => {
+  if (!targetContract && !sender) {
+    return { isWhitelisted: false, dapp: null };
+  }
+
+  // Single query to check both contract and sender, and get DApp info
+  const result = await prisma.$transaction(async (tx) => {
+    // Check contract first
+    if (targetContract) {
+      const contract = await tx.contract.findFirst({
+        where: { 
+          address: targetContract,
+          active: true 
+        },
+        include: {
+          dapp: {
+            include: {
+              apiKeys: true,
+              contracts: true
+            }
+          }
+        }
+      });
+
+      if (contract && (!contract.dapp.apiKeys || contract.dapp.apiKeys.length === 0)) {
+        return { isWhitelisted: true, dapp: contract.dapp };
+      }
+    }
+
+    // Check sender if contract not found or DApp has API keys
+    if (sender) {
+      const senderRecord = await tx.sender.findFirst({
+        where: { 
+          address: sender,
+          active: true 
+        },
+        include: {
+          dapp: {
+            include: {
+              apiKeys: true,
+              contracts: true
+            }
+          }
+        }
+      });
+
+      if (senderRecord && (!senderRecord.dapp.apiKeys || senderRecord.dapp.apiKeys.length === 0)) {
+        return { isWhitelisted: true, dapp: senderRecord.dapp };
+      }
+    }
+
+    return { isWhitelisted: false, dapp: null };
+  });
+
+  return result;
+};
+
+export const checkDappHasApiKeys = async (dappId: string) => {
+  const dapp = await prisma.dApp.findUnique({
+    where: { id: dappId },
+    include: {
+      apiKeys: true
+    }
+  });
+  
+  return dapp && dapp.apiKeys && dapp.apiKeys.length > 0;
+};
+
+export const checkContractExistsForNoApiKeyDapps = async (address: string) => {
+  // Check if contract exists in any DApp that doesn't have API keys
+  const existingContract = await prisma.contract.findFirst({
+    where: {
+      address: address.toLowerCase(),
+      active: true,
+      dapp: {
+        apiKeys: {
+          none: {} // DApp has no API keys
+        }
+      }
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
+  });
+  
+  return existingContract;
+};
+
+export const checkSenderExistsForNoApiKeyDapps = async (address: string) => {
+  // Check if sender exists in any DApp that doesn't have API keys
+  const existingSender = await prisma.sender.findFirst({
+    where: {
+      address: address.toLowerCase(),
+      active: true,
+      dapp: {
+        apiKeys: {
+          none: {} // DApp has no API keys
+        }
+      }
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
+  });
+  
+  return existingSender;
+};
+
+export const checkContractExistsForApiKeyDapps = async (address: string) => {
+  // Check if contract exists in any DApp that has API keys
+  const existingContract = await prisma.contract.findFirst({
+    where: {
+      address: address.toLowerCase(),
+      active: true,
+      dapp: {
+        apiKeys: {
+          some: {} // DApp has at least one API key
+        }
+      }
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
+  });
+  
+  return existingContract;
+};
+
+export const checkSenderExistsForApiKeyDapps = async (address: string) => {
+  // Check if sender exists in any DApp that has API keys
+  const existingSender = await prisma.sender.findFirst({
+    where: {
+      address: address.toLowerCase(),
+      active: true,
+      dapp: {
+        apiKeys: {
+          some: {} // DApp has at least one API key
+        }
+      }
+    },
+    include: {
+      dapp: {
+        include: {
+          apiKeys: true
+        }
+      }
+    }
+  });
+  
+  return existingSender;
 };

@@ -10,7 +10,7 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account }: { token: JWT; account: any }) {
+    async jwt({ token, account }: { token: JWT; account: { id?: string; access_token?: string; id_token?: string; expires_at?: number } | null }) {
       if (account) {
         token.userId = account.id as string;
         token.accessToken = account.access_token;

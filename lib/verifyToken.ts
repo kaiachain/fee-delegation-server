@@ -1,5 +1,4 @@
 import { OAuth2Client, TokenPayload } from "google-auth-library";
-import jwt from "jsonwebtoken";
 
 interface DecodedToken extends TokenPayload {
   role: "viewer" | "editor";
@@ -8,7 +7,6 @@ interface DecodedToken extends TokenPayload {
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
 export async function verify(idToken: string): Promise<DecodedToken> {
-  const decoded = jwt.decode(idToken);
   try {
     const ticket = await client.verifyIdToken({
       idToken,
