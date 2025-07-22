@@ -19,12 +19,13 @@ export async function POST(req: NextRequest) {
       return createResponse("BAD_REQUEST", "Invalid contract address");
     }
 
-    // Check if contract exists with the same address and swap configuration
+    // Check if contract exists with the same address and swap configuration (only active contracts)
     const existingContract = await prisma.contract.findFirst({
       where: {
         address: address.toLowerCase(),
         hasSwap: hasSwap || false,
-        swapAddress: hasSwap ? swapAddress?.toLowerCase() : null
+        swapAddress: hasSwap ? swapAddress?.toLowerCase() : null,
+        active: true
       }
     });
 

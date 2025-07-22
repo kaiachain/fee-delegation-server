@@ -20,11 +20,7 @@ export default function Management() {
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("asc");
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
-  const [statusConfirmModal, setStatusConfirmModal] = useState<{ isOpen: boolean; dappId: string; currentStatus: boolean }>({
-    isOpen: false,
-    dappId: "",
-    currentStatus: false
-  });
+
 
   const getDapps = async () => {
     const result = await fetchData("/dapps/management", { method: "GET" }, session);
@@ -94,31 +90,7 @@ export default function Management() {
       setDapps(dapps.filter((dapp) => dapp.id !== dappId));
   };
 
-  const handleStatusConfirm = async () => {
-    const { dappId, currentStatus } = statusConfirmModal;
-    const result = await fetchData(
-      "/dapps/status",
-      { 
-        method: "PUT", 
-        body: { 
-          id: dappId,
-          active: !currentStatus 
-        } 
-      },
-      session
-    );
-    
-    if (!result.status) {
-      return;
-    }
-    
-    setDapps(dapps.map(dapp => 
-      dapp.id === dappId 
-        ? { ...dapp, active: !currentStatus }
-        : dapp
-    ));
-    setStatusConfirmModal({ isOpen: false, dappId: "", currentStatus: false });
-  };
+
 
   const onDappAdd = (dapp: Dapp) => {
     setDapps([...dapps, { ...dapp, active: true }]);
@@ -399,33 +371,7 @@ export default function Management() {
             {/* DApps Grid */}
             <div className="grid grid-cols-1 gap-6">
               {sortedAndFilteredDapps.map((dapp) => (
-                <DappCard key={dapp.id} dapp={dapp}>
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setStatusConfirmModal({
-                          isOpen: true,
-                          dappId: dapp.id,
-                          currentStatus: dapp.active
-                        });
-                      }}
-                      className={`inline-flex items-center px-3 py-1.5 text-sm font-medium rounded-lg transition-all duration-200 ${
-                        dapp.active
-                          ? "bg-gradient-to-r from-green-500 to-emerald-500 text-white"
-                          : "bg-gradient-to-r from-gray-500 to-gray-600 text-white"
-                      }`}
-                    >
-                      <svg className={`h-4 w-4 mr-1.5 ${dapp.active ? 'text-green-100' : 'text-gray-100'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={dapp.active ? "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" : "M10 14l2-2m0 0l2-2m-2 2l-2-2m2 2l2 2m7-2a9 9 0 11-18 0 9 9 0 0118 0z"} />
-                      </svg>
-                      {dapp.active ? "Active" : "Inactive"}
-                    </button>
-                    <DelDappBtn
-                      dapp={dapp}
-                      deleteDapp={() => deleteDapp(dapp.id)}
-                    />
-                  </div>
+                <DappCard key={dapp.id} dapp={dapp} deleteDapp={deleteDapp}>
                 </DappCard>
               ))}
             </div>
@@ -452,50 +398,7 @@ export default function Management() {
             )}
           </div>
 
-          {/* Status Confirmation Modal */}
-          <Modal
-            isOpen={statusConfirmModal.isOpen}
-            onRequestClose={() => setStatusConfirmModal({ isOpen: false, dappId: "", currentStatus: false })}
-            contentLabel="Confirm Status Change"
-            ariaHideApp={false}
-            className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50"
-          >
-            <div className="bg-white p-6 rounded-lg w-96 shadow-xl">
-              <div className="flex items-center justify-center mb-4">
-                <div className={`p-3 rounded-full ${statusConfirmModal.currentStatus ? 'bg-yellow-100' : 'bg-green-100'}`}>
-                  <svg className={`h-6 w-6 ${statusConfirmModal.currentStatus ? 'text-yellow-600' : 'text-green-600'}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d={statusConfirmModal.currentStatus ? "M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" : "M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"} />
-                  </svg>
-                </div>
-              </div>
-              <h3 className="text-lg font-medium text-gray-900 text-center mb-2">
-                {statusConfirmModal.currentStatus ? "Deactivate DApp?" : "Activate DApp?"}
-              </h3>
-              <p className="text-sm text-gray-500 text-center mb-6">
-                {statusConfirmModal.currentStatus 
-                  ? "This will make the DApp inactive. Users won't be able to use it."
-                  : "This will make the DApp active. Users will be able to use it."}
-              </p>
-              <div className="flex justify-end space-x-3">
-                <button
-                  onClick={() => setStatusConfirmModal({ isOpen: false, dappId: "", currentStatus: false })}
-                  className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleStatusConfirm}
-                  className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                    statusConfirmModal.currentStatus
-                      ? "bg-yellow-500 hover:bg-yellow-600 focus:ring-yellow-500"
-                      : "bg-green-500 hover:bg-green-600 focus:ring-green-500"
-                  }`}
-                >
-                  {statusConfirmModal.currentStatus ? "Deactivate" : "Activate"}
-                </button>
-              </div>
-            </div>
-          </Modal>
+
         </div>
       </div>
     </div>

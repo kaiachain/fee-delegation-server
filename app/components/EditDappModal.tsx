@@ -9,59 +9,68 @@ import { Dapp, Contract, Sender, ApiKey, EmailAlert } from "../types/index";
 import ErrorModal from "./ErrorModal";
 import crypto from "crypto";
 
-interface AddDappModalProps {
+interface EditDappModalProps {
   isModalOpen: boolean;
   setIsModalOpen: (isOpen: boolean) => void;
-  onDappAdd: (dapp: Dapp) => void;
+  dapp: Dapp;
+  onDappUpdate: (updatedDapp: Dapp) => void;
 }
 
-export default function AddDappModal({
+export default function EditDappModal({
   isModalOpen,
   setIsModalOpen,
-  onDappAdd,
-}: AddDappModalProps) {
+  dapp,
+  onDappUpdate,
+}: EditDappModalProps) {
   const cInputRef = useRef<HTMLInputElement>(null);
   const cAddButtonRef = useRef<HTMLButtonElement>(null);
   const sInputRef = useRef<HTMLInputElement>(null);
   const sAddButtonRef = useRef<HTMLButtonElement>(null);
-  const [name, setName] = useState("");
-  const [url, setUrl] = useState("");
-  const [balance, setBalance] = useState<number>(0);
+  
+  // Basic Information
+  const [name, setName] = useState(dapp.name);
+  const [url, setUrl] = useState(dapp.url);
+  const [balance, setBalance] = useState<number>(Number(dapp.balance));
   const [terminationDate, setTerminationDate] = useState<string>("");
+  
+  // Contracts and Senders
   const [contractAddress, setContractAddress] = useState("");
-  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [contracts, setContracts] = useState<Contract[]>(dapp.contracts || []);
   const [senderAddress, setSenderAddress] = useState("");
-  const [senders, setSenders] = useState<Sender[]>([]);
+  const [senders, setSenders] = useState<Sender[]>(dapp.senders || []);
   const [hasSwap, setHasSwap] = useState(false);
   const [swapAddress, setSwapAddress] = useState("");
+  
+  // API Keys
+  const [apiKeys, setApiKeys] = useState<ApiKey[]>(dapp.apiKeys || []);
+  const [newApiKeyName, setNewApiKeyName] = useState("");
+  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
+  
+  // Email Alerts
+  const [emailAlerts, setEmailAlerts] = useState<Array<{email: string, balanceThreshold: number, isActive: boolean}>>(
+    (dapp.emailAlerts || []).map(alert => ({
+      email: alert.email,
+      balanceThreshold: Number(alert.balanceThreshold),
+      isActive: alert.isActive
+    }))
+  );
+  const [newEmailAlert, setNewEmailAlert] = useState({email: "", balanceThreshold: 0, isActive: true});
+  
+  // Error handling
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title: string; message: string }>({
     isOpen: false,
     title: "",
     message: ""
   });
+  
   const { data: session } = useSession();
-  const [apiKeys, setApiKeys] = useState<ApiKey[]>([]);
-  const [newApiKeyName, setNewApiKeyName] = useState("");
-  const [isGeneratingKey, setIsGeneratingKey] = useState(false);
-  const [showApiKeyInput, setShowApiKeyInput] = useState(false);
-  const [newContract, setNewContract] = useState("");
-  const [showContractInput, setShowContractInput] = useState(false);
-  const [newSender, setNewSender] = useState("");
-  const [showSenderInput, setShowSenderInput] = useState(false);
-  const [emailAlerts, setEmailAlerts] = useState<Array<{email: string, balanceThreshold: number, isActive: boolean}>>([]);
-  const [newEmailAlert, setNewEmailAlert] = useState({email: "", balanceThreshold: 0, isActive: true});
 
   // Convert UTC to KST for display
   const convertUTCtoKST = (utcDate: string) => {
     if (!utcDate) return "";
     const date = new Date(utcDate);
     const kstDate = new Date(date.getTime() + (9 * 60 * 60 * 1000)); // Add 9 hours for KST
-    return kstDate.toLocaleDateString("ko-KR", {
-      timeZone: "UTC",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit"
-    });
+    return kstDate.toISOString().split('T')[0]; // Format as YYYY-MM-DD
   };
 
   // Convert KST to UTC for saving
@@ -72,11 +81,23 @@ export default function AddDappModal({
     return utcDate.toISOString();
   };
 
+  // Initialize form with dapp data when modal opens
   useEffect(() => {
-    if (isModalOpen) {
-      resetForm();
+    if (isModalOpen && dapp) {
+      setName(dapp.name);
+      setUrl(dapp.url);
+      setBalance(Number(dapp.balance));
+      setTerminationDate(convertUTCtoKST(dapp.terminationDate || ""));
+      setContracts(dapp.contracts || []);
+      setSenders(dapp.senders || []);
+      setApiKeys(dapp.apiKeys || []);
+      setEmailAlerts((dapp.emailAlerts || []).map(alert => ({
+        email: alert.email,
+        balanceThreshold: Number(alert.balanceThreshold),
+        isActive: alert.isActive
+      })));
     }
-  }, [isModalOpen]);
+  }, [isModalOpen, dapp]);
 
   const handleCAddKeyPress = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter") {
@@ -122,7 +143,8 @@ export default function AddDappModal({
           body: {
             address: contractAddress,
             hasSwap,
-            swapAddress: hasSwap ? swapAddress : null
+            swapAddress: hasSwap ? swapAddress : null,
+            excludeDappId: dapp.id // Exclude current dapp from check
           }
         },
         session
@@ -176,7 +198,8 @@ export default function AddDappModal({
         {
           method: "POST",
           body: {
-            address: senderAddress
+            address: senderAddress,
+            excludeDappId: dapp.id // Exclude current dapp from check
           }
         },
         session
@@ -244,7 +267,7 @@ export default function AddDappModal({
     setApiKeys(apiKeys.filter((_, i) => i !== index));
   };
 
-  const handleAddDapp = async () => {
+  const handleUpdateDapp = async () => {
     if (name.trim() && url.trim() && balance >= 0) {
       // Check if at least one form of access control is provided
       if (apiKeys.length === 0 && contracts.length === 0 && senders.length === 0) {
@@ -256,7 +279,8 @@ export default function AddDappModal({
         return;
       }
 
-      const newDapp: Dapp = {
+      const updatedDapp = {
+        id: dapp.id,
         name,
         url,
         balance,
@@ -265,22 +289,24 @@ export default function AddDappModal({
         senders,
         apiKeys,
         emailAlerts: emailAlerts.map(alert => ({
-          ...alert,
-          balanceThreshold: alert.balanceThreshold.toString()
+          email: alert.email,
+          balanceThreshold: alert.balanceThreshold.toString(),
+          isActive: alert.isActive
         })),
       };
-      // Add new dapp to the database
+
+      // Update dapp in the database
       const result = await fetchData(
         "/dapps",
         {
-          method: "POST",
-          body: newDapp,
+          method: "PUT",
+          body: updatedDapp,
         },
         session
       );
 
       if (!result.status) {
-        let errorMessage = "There was an error adding the DApp. Please try again.";
+        let errorMessage = "There was an error updating the DApp. Please try again.";
         
         // Handle specific error cases based on error code
         switch (result.error) {
@@ -291,7 +317,7 @@ export default function AddDappModal({
             errorMessage = result.message || "Invalid DApp data. Please check all fields and try again.";
             break;
           case "UNAUTHORIZED":
-            errorMessage = "You don't have permission to create DApps. Please contact an administrator.";
+            errorMessage = "You don't have permission to update DApps. Please contact an administrator.";
             break;
           case "INTERNAL_ERROR":
             errorMessage = result.message || "An unexpected error occurred. Please try again later.";
@@ -302,15 +328,14 @@ export default function AddDappModal({
 
         setErrorModal({
           isOpen: true,
-          title: "Failed to Add DApp",
+          title: "Failed to Update DApp",
           message: errorMessage
         });
         return;
       }
 
-      onDappAdd(result.data);
+      onDappUpdate(result.data);
       setIsModalOpen(false);
-      resetForm();
     } else {
       setErrorModal({
         isOpen: true,
@@ -320,34 +345,12 @@ export default function AddDappModal({
     }
   };
 
-  const resetForm = () => {
-    setName("");
-    setUrl("");
-    setBalance(0);
-    setTerminationDate("");
-    setContracts([]);
-    setContractAddress("");
-    setSwapAddress("");
-    setHasSwap(false);
-    setSenders([]);
-    setSenderAddress("");
-    setApiKeys([]);
-    setNewApiKeyName("");
-    setShowApiKeyInput(false);
-    setNewContract("");
-    setShowContractInput(false);
-    setNewSender("");
-    setShowSenderInput(false);
-    setEmailAlerts([]);
-    setNewEmailAlert({email: "", balanceThreshold: 0, isActive: true});
-  };
-
   return (
     <>
       <Modal
         isOpen={isModalOpen}
         onRequestClose={() => setIsModalOpen(false)}
-        contentLabel="Add Dapp"
+        contentLabel="Edit Dapp"
         ariaHideApp={false}
         className="fixed inset-0 flex justify-center items-center bg-black bg-opacity-50 z-50"
       >
@@ -359,11 +362,11 @@ export default function AddDappModal({
               <div className="flex justify-between items-center">
                 <div className="flex items-center space-x-2">
                   <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                   </svg>
                   <div>
-                    <h2 className="text-lg font-bold text-white">Add New DApp</h2>
-                    <p className="text-blue-100 text-xs mt-0.5">Create a new decentralized application entry</p>
+                    <h2 className="text-lg font-bold text-white">Edit DApp</h2>
+                    <p className="text-blue-100 text-xs mt-0.5">Update {dapp.name} settings</p>
                   </div>
                 </div>
                 <button
@@ -876,10 +879,10 @@ export default function AddDappModal({
               Cancel
             </button>
             <button
-              onClick={handleAddDapp}
+              onClick={handleUpdateDapp}
               className="px-4 py-2.5 text-white bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-all duration-200 shadow-sm hover:shadow"
             >
-              Add DApp
+              Update DApp
             </button>
           </div>
         </div>

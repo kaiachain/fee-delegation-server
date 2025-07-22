@@ -2,10 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Wallet, parseTransaction } from "@kaiachain/ethers-ext/v6";
 import { createResponse } from "@/lib/apiUtils";
 import {
-  checkWhitelistedContract,
-  checkWhitelistedSender,
-  getDappfromContract,
-  getDappfromSender,
+  checkWhitelistedAndGetDapp,
   isEnoughBalance,
   updateDappWithFee,
   validateSwapTransaction,
@@ -13,6 +10,8 @@ import {
 import { getDappByApiKey } from "@/lib/dappUtils";
 import pickProviderFromPool from "@/lib/rpcProvider";
 import { DApp, Contract as PrismaContract } from "@prisma/client";
+import { sendBalanceAlertEmail } from "@/lib/emailUtils";
+import { prisma } from "@/lib/prisma";
 
 // Handle preflight OPTIONS request
 export async function OPTIONS() {
@@ -59,47 +58,57 @@ export async function POST(req: NextRequest) {
         if (!dapp) {
           return createResponse("BAD_REQUEST", "Invalid API key");
         }
+        // Check if Dapp has contracts or senders which are whitelisted
+        if(dapp.contracts.length > 0 || dapp.senders.length > 0) {
+          const isContractWhitelisted = dapp.contracts.some((contract) => contract.address === targetContract);
+          const isSenderWhitelisted = dapp.senders.some((_sender) => _sender.address === sender);
+          
+          if(!isContractWhitelisted && !isSenderWhitelisted) {
+            return createResponse(
+              "BAD_REQUEST",
+              "Contract or sender address are not whitelisted"
+            );
+          }
+        }
       } else {
         // If no API key, fall back to contract/sender validation
-        if (
-          !(await checkWhitelistedContract(targetContract)) &&
-          !(await checkWhitelistedSender(sender))
-        ) {
+        const { isWhitelisted, dapp: foundDapp } = await checkWhitelistedAndGetDapp(targetContract, sender);
+        
+        if (!isWhitelisted) {
           return createResponse(
             "BAD_REQUEST",
             "Contract or sender address are not whitelisted"
           );
         }
+        
         tx.feePayer = process.env.ACCOUNT_ADDRESS as string;
-
-        // balance check
-        if (targetContract) {
-          dapp = await getDappfromContract(targetContract);
-        }
-
-        if (!dapp && sender) {
-          dapp = await getDappfromSender(sender);
-        }
+        dapp = foundDapp;
 
         if (!dapp) {
-          return createResponse("BAD_REQUEST", "Address not found");
+          return createResponse("BAD_REQUEST", "Dapp not configured. Please contact the administrator.");
         }
+      }
 
-        const dappWithContracts = dapp as unknown as DApp & {
-          contracts: PrismaContract[];
-        };
+      // Transform the dapp data to match the expected type for validateSwapTransaction
+      const dappWithContracts = {
+        name: dapp.name,
+        contracts: dapp.contracts.map(contract => ({
+          hasSwap: contract.hasSwap,
+          address: contract.address,
+          swapAddress: contract.swapAddress || undefined
+        }))
+      };
 
-        // Check if the transaction is a swap transaction
-        const isValidSwap = await validateSwapTransaction(
-          dappWithContracts,
-          tx
+      // Check if the transaction is a swap transaction
+      const isValidSwap = await validateSwapTransaction(
+        dappWithContracts,
+        tx
+      );
+      if (!isValidSwap) {
+        return createResponse(
+          "BAD_REQUEST",
+          "Swap token address is not whitelisted"
         );
-        if (!isValidSwap) {
-          return createResponse(
-            "BAD_REQUEST",
-            "Swap token address is not whitelisted"
-          );
-        }
       }
 
       // Check if DApp is active
@@ -113,7 +122,7 @@ export async function POST(req: NextRequest) {
       if (!isEnoughBalance(BigInt(dapp.balance ?? 0))) {
         return createResponse(
           "BAD_REQUEST",
-          "Insufficient balance in fee delegation server, please contact us"
+          "Insufficient balance in fee delegation server, please contact the administrator."
         );
       }
 
@@ -158,6 +167,7 @@ export async function POST(req: NextRequest) {
         // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
         if (txHash) break;
       } catch (e) {
+        console.log(e);
         console.error(
           "[" +
             sendCnt +
@@ -241,6 +251,62 @@ const settlement = async (dapp: any, receipt: any) => {
       if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
         const usedFee = BigInt(receipt?.gasUsed) * BigInt(receipt?.gasPrice);
         await updateDappWithFee(dapp, usedFee);
+        
+        // Get updated DApp with email alerts
+        const updatedDapp = await prisma.dApp.findUnique({
+          where: { id: dapp.id },
+          include: {
+            emailAlerts: {
+              where: { isActive: true }
+            }
+          }
+        });
+        
+        if (updatedDapp) {
+          const newBalance = BigInt(updatedDapp.balance);
+          
+          // Check each email alert threshold
+          for (const alert of updatedDapp.emailAlerts) {
+            const threshold = BigInt(alert.balanceThreshold);
+            // If balance is now below threshold
+            if (newBalance < threshold) {
+              try {
+                // Send email alert
+                const emailResult = await sendBalanceAlertEmail({
+                  email: alert.email,
+                  dappName: updatedDapp.name,
+                  newBalance: newBalance.toString(),
+                  threshold: threshold.toString()
+                });
+                
+                if (emailResult.success) {
+                  // Log the email alert
+                  await prisma.emailAlertLog.create({
+                    data: {
+                      email: alert.email,
+                      dappId: updatedDapp.id,
+                      dappName: updatedDapp.name,
+                      newBalance: newBalance.toString(),
+                      threshold: threshold.toString()
+                    }
+                  });
+                  
+                  // Disable the alert after sending
+                  await prisma.emailAlert.update({
+                    where: { id: alert.id },
+                    data: { isActive: false }
+                  });
+                  
+                  console.log(`Email alert sent to ${alert.email} for DApp ${updatedDapp.name}`);
+                } else {
+                  console.error(`Failed to send email alert to ${alert.email}:`, emailResult.error);
+                }
+              } catch (error) {
+                console.error(`Error sending email alert to ${alert.email}:`, error);
+              }
+            }
+          }
+        }
       } else {
         throw new Error("field missing in receipt:" + JSON.stringify(receipt));
       }

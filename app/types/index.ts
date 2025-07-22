@@ -10,6 +10,7 @@ export interface Dapp {
   contracts: Contract[];
   senders: Sender[];
   apiKeys: ApiKey[];
+  emailAlerts?: EmailAlert[];
 }
 
 export interface Contract {
@@ -17,11 +18,13 @@ export interface Contract {
   address: string;
   hasSwap: boolean;
   swapAddress?: string;
+  active?: boolean;
 }
 
 export interface Sender {
   id?: string;
   address: string;
+  active?: boolean;
 }
 
 export interface ApiKey {
@@ -30,4 +33,25 @@ export interface ApiKey {
   name: string;
   dappId?: string;
   createdAt?: string;
+  active?: boolean;
+}
+
+export interface EmailAlert {
+  id?: string;
+  email: string;
+  balanceThreshold: string;
+  isActive: boolean;
+  dappId?: string;
+  createdAt?: string;
+}
+
+export interface EmailAlertLog {
+  id?: string;
+  email: string;
+  dappId: string;
+  dappName: string;
+  newBalance: string;
+  threshold: string;
+  sentAt: string;
+  isRead: boolean;
 } 
