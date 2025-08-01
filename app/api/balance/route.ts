@@ -36,6 +36,9 @@ export async function GET(req: NextRequest) {
       balance = dapp.balance;
     } else {
       // If no API key, fall back to contract/sender validation for non-API key DApps
+      if (!address) {
+        return createResponse("BAD_REQUEST", "Address is required");
+      }
       const { isWhitelisted, dapp: foundDapp } = await checkWhitelistedAndGetDapp(address.toLowerCase(), address.toLowerCase());
 
       if (!isWhitelisted) {
