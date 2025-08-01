@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { isEnoughBalance } from "@/lib/apiUtils";
-import { createResponse } from "@/lib/apiUtils";
-import { prisma } from "@/lib/prisma";
+import { createResponse, checkWhitelistedAndGetDapp } from "@/lib/apiUtils";
+import { getDappByApiKey } from "@/lib/dappUtils";
 import { ethers } from "ethers";
 
 export async function GET(req: NextRequest) {
@@ -9,39 +9,55 @@ export async function GET(req: NextRequest) {
     const searchParams = req.nextUrl.searchParams;
     const address = searchParams.get("address");
 
-    if (!ethers.isAddress(address)) {
+    // Extract authorization token
+    const authHeader = req.headers.get("authorization");
+    const apiKey = authHeader?.startsWith("Bearer ")
+        ? authHeader.substring(7)
+        : null;
+    
+    if(!apiKey && !address) {
+      return createResponse("BAD_REQUEST", "Invalid Input");
+    }
+
+    if (address && !ethers.isAddress(address)) {
       return createResponse("BAD_REQUEST", "Invalid address");
     }
 
-    let balance;
-    const contract = await prisma.contract.findUnique({
-      where: { address },
-    });
-    if (!contract) {
-      const sender = await prisma.sender.findUnique({
-        where: { address },
-      });
-      if (!sender) {
-        return createResponse("NOT_FOUND", "Address not found");
+    let dapp;
+    let balance: string | null = null;
+
+    // Check if API key is present and valid
+    if (apiKey) {
+      dapp = await getDappByApiKey(apiKey?.toLowerCase() || "");
+      if (!dapp) {
+        return createResponse("BAD_REQUEST", "Invalid API key");
       }
-      const dapp = await prisma.dApp.findUnique({
-        select: { balance: true },
-        where: { id: sender.dappId },
-      });
-      balance = dapp?.balance as string;
+      
+      balance = dapp.balance;
     } else {
-      const dapp = await prisma.dApp.findUnique({
-        select: { balance: true },
-        where: { id: contract.dappId },
-      });
-      balance = dapp?.balance as string;
+      // If no API key, fall back to contract/sender validation for non-API key DApps
+      const { isWhitelisted, dapp: foundDapp } = await checkWhitelistedAndGetDapp(address.toLowerCase(), address.toLowerCase());
+
+      if (!isWhitelisted) {
+        return createResponse("BAD_REQUEST", "Address not whitelisted");
+      }
+      
+      if (!foundDapp) {
+        return createResponse("NOT_FOUND", "DApp not found");
+      }
+      
+      dapp = foundDapp;
+      balance = dapp.balance;
     }
-    if (isEnoughBalance(BigInt(balance))) {
-      return createResponse("SUCCESS", true);
-    } else {
-      return createResponse("SUCCESS", false);
+
+    if (!balance) {
+      return createResponse("NOT_FOUND", "Balance not found");
     }
+
+    const hasEnoughBalance = isEnoughBalance(BigInt(balance));
+    return createResponse("SUCCESS", hasEnoughBalance);
   } catch (error) {
-    return createResponse("INTERNAL_ERROR", JSON.stringify(error));
+    console.error("Balance check error:", error);
+    return createResponse("INTERNAL_ERROR", "Failed to check balance");
   }
 }
