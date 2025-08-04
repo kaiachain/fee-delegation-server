@@ -4,6 +4,122 @@ import { createResponse, checkWhitelistedAndGetDapp } from "@/lib/apiUtils";
 import { getDappByApiKey } from "@/lib/dappUtils";
 import { ethers } from "ethers";
 
+/**
+ * @swagger
+ * /api/balance:
+ *   get:
+ *     tags: [Balance]
+ *     summary: Check DApp balance
+ *     description: |
+ *       Check if DApp has sufficient balance for fee delegation.
+ *       
+ *       **Authentication Options:**
+ *       - **API Key**: Provide Bearer token to check associated DApp balance
+ *       - **Address Parameter**: Provide address parameter for whitelisted addresses
+ *       
+ *       **Usage:**
+ *       - With API Key: `GET /api/balance` + Authorization header
+ *       - With Address: `GET /api/balance?address=0x...` (no auth required for whitelisted addresses)
+ *     security:
+ *       - BearerAuth: []
+ *       - {}
+ *     parameters:
+ *       - name: address
+ *         in: query
+ *         description: Contract or sender address to check balance for (required when no API key provided)
+ *         required: false
+ *         schema:
+ *           type: string
+ *           pattern: '^0x[a-fA-F0-9]{40}$'
+ *           example: "0x742d35Cc6634C0532925a3b8D2A4DDDeAe0e4Cd3"
+ *     responses:
+ *       200:
+ *         description: Balance check successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/BalanceResponse'
+ *             examples:
+ *               sufficient_balance:
+ *                 summary: Sufficient Balance
+ *                 value:
+ *                   message: "Request was successful"
+ *                   data: true
+ *                   status: true
+ *               insufficient_balance:
+ *                 summary: Insufficient Balance
+ *                 value:
+ *                   message: "Request was successful"
+ *                   data: false
+ *                   status: true
+ *       400:
+ *         description: Bad request
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalid_input:
+ *                 summary: Invalid Input
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Invalid Input"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               invalid_address:
+ *                 summary: Invalid Address Format
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Invalid address"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               invalid_api_key:
+ *                 summary: Invalid API Key
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Invalid API key"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               address_not_whitelisted:
+ *                 summary: Address Not Whitelisted
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Address not whitelisted"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *       404:
+ *         description: Resource not found
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               dapp_not_found:
+ *                 summary: DApp Not Found
+ *                 value:
+ *                   message: "Not found"
+ *                   data: "DApp not found"
+ *                   error: "NOT_FOUND"
+ *                   status: false
+ *               balance_not_found:
+ *                 summary: Balance Not Found
+ *                 value:
+ *                   message: "Not found"
+ *                   data: "Balance not found"
+ *                   error: "NOT_FOUND"
+ *                   status: false
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             example:
+ *               message: "Internal server error"
+ *               data: "Failed to check balance"
+ *               error: "INTERNAL_ERROR"
+ *               status: false
+ */
 export async function GET(req: NextRequest) {
   try {
     const searchParams = req.nextUrl.searchParams;
