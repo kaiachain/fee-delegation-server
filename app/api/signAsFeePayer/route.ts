@@ -13,11 +13,135 @@ import { DApp, Contract as PrismaContract } from "@prisma/client";
 import { sendBalanceAlertEmail } from "@/lib/emailUtils";
 import { prisma } from "@/lib/prisma";
 
-// Handle preflight OPTIONS request
 export async function OPTIONS() {
   return createResponse("SUCCESS", {});
 }
 
+/**
+ * @swagger
+ * /api/signAsFeePayer:
+ *   post:
+ *     tags: [Fee Delegation]
+ *     summary: Submit fee-delegated transaction
+ *     description: |
+ *       Submit a user-signed fee-delegated transaction to be processed and paid by the fee delegation service.
+ *       
+ *       **Authentication Options:**
+ *       - **API Key**: Include Bearer token in Authorization header
+ *       - **Address Whitelisting**: No authentication required if sender/contract is whitelisted
+
+ *     security:
+ *       - BearerAuth: []
+ *       - {}
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             $ref: '#/components/schemas/FeeDelegationRequest'
+ *           example:
+ *             userSignedTx:
+ *               raw: "0x09f8860585066720b300830186a09469209103b24e6272b33051dfb905fd9e9e2265d08711c37937e080009465e9d8b6069eec1ef3b8bfae57326008b7aec2c9f847f8458207f6a0cb70dc0..."
+ *     responses:
+ *       200:
+ *         description: Transaction processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/SuccessResponse'
+ *             examples:
+ *               success:
+ *                 summary: Transaction Success
+ *                 value:
+ *                   message: "Request was successful"
+ *                   data:
+ *                     _type: "TransactionReceipt"
+ *                     blockHash: "0x2a7ae196f6e7363fe3cfc79132c1d16292d159e231d73b4308f598a3222d1f57"
+ *                     blockNumber: 191523443
+ *                     hash: "0x0ca73736ceecf2dcf0ec2e1f65760d0b4f7348726cb9a0477710172b1dd44350"
+ *                     status: 1
+ *                     gasUsed: "31000"
+ *                   status: true
+ *               reverted:
+ *                 summary: Transaction Reverted
+ *                 value:
+ *                   message: "Transaction reverted"
+ *                   error: "REVERTED"
+ *                   data:
+ *                     hash: "0x0ca73736ceecf2dcf0ec2e1f65760d0b4f7348726cb9a0477710172b1dd44350"
+ *                     status: 0
+ *                   status: false
+ *       400:
+ *         description: Bad request - validation failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               invalid_api_key:
+ *                 summary: Invalid API Key
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Invalid API key"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               missing_data:
+ *                 summary: Missing Required Data
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               not_whitelisted:
+ *                 summary: Address Not Whitelisted
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Contract or sender address are not whitelisted"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               insufficient_balance:
+ *                 summary: Insufficient Balance
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Insufficient balance in fee delegation server, please contact the administrator."
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               dapp_inactive:
+ *                 summary: DApp Inactive
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "DApp is inactive. Please contact the administrator to activate the DApp."
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *               dapp_terminated:
+ *                 summary: DApp Terminated
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "DApp is terminated. Please contact the administrator to activate the DApp."
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *       500:
+ *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               transaction_failed:
+ *                 summary: Transaction Failed
+ *                 value:
+ *                   message: "Internal server error"
+ *                   data: "Transaction was failed"
+ *                   error: "INTERNAL_ERROR"
+ *                   status: false
+ *               network_busy:
+ *                 summary: Network Busy
+ *                 value:
+ *                   message: "Internal server error"
+ *                   data: "Sending transaction was failed after 5 try, network is busy"
+ *                   error: "INTERNAL_ERROR"
+ *                   status: false
+ */
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
