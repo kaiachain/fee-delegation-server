@@ -16,20 +16,20 @@ const options: swaggerJsdoc.Options = {
         url: 'https://opensource.org/licenses/MIT'
       }
     },
-    // servers: [
-    //   {
-    //     url: 'https://gas-fee-delegation.kaia.io',
-    //     description: 'Mainnet Production Server'
-    //   },
-    //   {
-    //     url: 'https://gas-fee-delegation-testnet.kaia.io',
-    //     description: 'Testnet Server'
-    //   },
-    //   {
-    //     url: 'http://localhost:3000',
-    //     description: 'Local Development Server'
-    //   }
-    // ],
+    servers: [
+      {
+        url: 'https://fee-delegation.kaia.io',
+        description: 'Mainnet Production Server'
+      },
+      {
+        url: 'https://fee-delegation-kairos.kaia.io',
+        description: 'Testnet Server'
+      },
+      // {
+      //   url: 'http://localhost:3000',
+      //   description: 'Local Development Server'
+      // }
+    ],
     components: {
       securitySchemes: {
         BearerAuth: {
