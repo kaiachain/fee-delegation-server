@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
         if (txHash) break;
       } catch (e: any) {
         console.log(e);
-        errorMessage = e?.error?.message || e?.message || "";
+        errorMessage = e?.message || "";
         console.error(
           "[" +
             sendCnt +
