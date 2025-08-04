@@ -159,6 +159,7 @@ export async function POST(req: NextRequest) {
     const feePayerSignedTx = await feePayer.signTransactionAsFeePayer(tx);
     let txHash;
     let sendCnt = 0;
+    let errorMessage = "";
     do {
       try {
         txHash = await provider.send("klay_sendRawTransaction", [
@@ -166,8 +167,9 @@ export async function POST(req: NextRequest) {
         ]);
         // const txResp = await feePayer.sendTransactionAsFeePayer(tx);
         if (txHash) break;
-      } catch (e) {
+      } catch (e: any) {
         console.log(e);
+        errorMessage = e?.message || "";
         console.error(
           "[" +
             sendCnt +
@@ -184,7 +186,7 @@ export async function POST(req: NextRequest) {
     if (!txHash) {
       return createResponse(
         "INTERNAL_ERROR",
-        "Sending transaction was failed after 5 try, network is busy"
+        "Sending transaction was failed after 5 try, network is busy. Error message: " + errorMessage
       );
     }
 
