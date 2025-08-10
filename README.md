@@ -1,122 +1,357 @@
-# Gas Fee Delegation Server for Transactions
+# Fee Delegation Server
 
-This repository contains a server implementation for gas fee delegation using Prisma and Node.js. Follow the steps below to set up and run the server.
+A combined Next.js and Node.js application for managing fee delegation with authentication and API endpoints.
 
----
+## Project Structure
 
-## Prerequisites
+```
+fee-delegation-server/
+│
+├── package.json
+├── server.js                 # Custom Express server
+├── next.config.ts           # Next.js configuration
+├── .env                     # Environment variables
+│
+├── app/                     # Next.js app directory
+│   ├── api/
+│   │   └── auth/           # NextAuth routes (handled by Next.js)
+│   ├── components/          # React components
+│   ├── layout.tsx          # Root layout
+│   └── page.tsx            # Homepage
+│
+├── backend/                 # Node.js backend logic
+│   ├── routes/             # Express routes
+│   │   ├── dapps.js        # /api/dapps/*
+│   │   ├── contracts.js    # /api/contracts/*
+│   │   ├── senders.js      # /api/senders/*
+│   │   ├── balance.js      # /api/balance/*
+│   │   ├── apiKeys.js      # /api/api-keys/*
+│   │   ├── pool.js         # /api/pool/*
+│   │   ├── emailAlerts.js  # /api/email-alerts/*
+│   │   ├── emailAlertLogs.js # /api/email-alert-logs/*
+│   │   ├── docs.js         # /api/docs/*
+│   │   ├── openapi.js      # /api/openapi.json/*
+│   │   └── signAsFeePayer.js # /api/signAsFeePayer/*
+│   ├── utils/              # Backend utilities (JavaScript)
+│   │   ├── apiUtils.js     # API utility functions
+│   │   ├── verifyToken.js  # Token verification
+│   │   ├── prisma.js       # Database client
+│   │   ├── authOptions.js  # Auth configuration
+│   │   └── swagger.js      # Swagger configuration
+│   ├── controllers/        # Business logic (future)
+│   ├── middleware/         # Express middlewares (future)
+│   ├── services/           # External services (future)
+│   ├── config/             # Configuration files (future)
+│   └── prisma/             # Database schema and migrations
+│
+├── lib/                     # Shared utilities (for Next.js)
+│   └── auth-options.ts     # NextAuth configuration (TypeScript)
+│
+├── public/                  # Static assets
+└── types/                   # TypeScript type definitions
+```
 
-Ensure you have the following installed on your system:
+## Features
 
-- **Node.js** (version 22)
-- **npm** (comes with Node.js)
-- **SQLite** (or any database supported by Prisma)
+- **Next.js Frontend**: Modern React-based UI with Next.js 15
+- **Express Backend**: Custom Express server for API endpoints
+- **NextAuth Integration**: Google OAuth authentication
+- **Database**: Prisma ORM with SQLite (development) / PostgreSQL (production)
+- **API Endpoints**: RESTful API for managing DApps, contracts, senders, etc.
+- **TypeScript Support**: Full TypeScript support for type safety
+- **Fee Delegation**: Support for fee-delegated transactions
+- **Email Alerts**: Balance threshold monitoring with email notifications
+- **Access Control**: Multiple authentication methods (API keys, contract/sender whitelisting)
 
----
+## API Endpoints
 
-## Step-by-Step Setup
+### Authentication (NextAuth)
+- `GET/POST /api/auth/*` - Handled by NextAuth in Next.js
 
-### 1. Install Dependencies
+### DApps Management
+- `GET /api/dapps` - Get all DApps (public)
+- `POST /api/dapps` - Create a new DApp (requires editor access)
+- `PUT /api/dapps` - Update a DApp (requires editor access)
+- `DELETE /api/dapps` - Delete a DApp (requires editor access)
 
-Run the following command to install the required Node.js packages:
+### Contracts Management
+- `POST /api/contracts/check` - Check if contract exists (requires editor access)
+- `POST /api/contracts` - Add a contract (requires editor access)
+- `DELETE /api/contracts` - Deactivate a contract (requires editor access)
 
+### Senders Management
+- `POST /api/senders/check` - Check if sender exists (requires editor access)
+- `POST /api/senders` - Add a sender (requires editor access)
+- `DELETE /api/senders` - Deactivate a sender (requires editor access)
+
+### API Keys Management
+- `POST /api/api-keys` - Add an API key (requires editor access)
+- `DELETE /api/api-keys` - Deactivate an API key (requires editor access)
+
+### Email Alerts
+- `GET /api/email-alerts` - Get all email alerts (requires editor access)
+- `POST /api/email-alerts` - Create an email alert (requires editor access)
+- `PUT /api/email-alerts` - Update an email alert (requires editor access)
+- `DELETE /api/email-alerts` - Delete an email alert (requires editor access)
+
+### Email Alert Logs
+- `GET /api/email-alert-logs` - Get email alert logs with optional filtering (requires editor access)
+  - Query parameters: `dappId`, `email`, `isRead`
+
+### Balance & Pool Management
+- `GET /api/balance` - Check DApp balance (supports API key auth or address whitelisting)
+- `GET /api/pool` - Get pool balance information (requires editor access)
+
+### Fee Delegation
+- `POST /api/signAsFeePayer` - Submit fee-delegated transaction (supports API key auth or address whitelisting)
+- `OPTIONS /api/signAsFeePayer` - CORS preflight request
+
+### Documentation
+- `GET /api/docs` - Swagger UI documentation
+- `GET /api/openapi.json` - OpenAPI specification
+
+## API Authentication & Access Control
+
+### Editor Access (Admin Functions)
+Most management endpoints require editor access through Google OAuth:
+- DApp CRUD operations
+- Contract/sender management
+- API key management
+- Email alert management
+- Pool balance viewing
+
+### API Key Authentication
+For fee delegation and balance checking:
+- Include `Authorization: Bearer <api-key>` header
+- API keys are generated per DApp
+- Format: `kaia_<32-byte-hex>`
+
+### Address Whitelisting
+Alternative authentication method for fee delegation:
+- No authentication header required
+- Sender/contract address must be whitelisted in a DApp
+- Works for DApps without API keys
+
+## Getting Started
+
+### Prerequisites
+- Node.js 18+
+- SQLite (development) or PostgreSQL (production)
+- Google OAuth credentials
+
+### Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+cd fee-delegation-server
+```
+
+2. Install dependencies:
 ```bash
 npm install
 ```
 
----
-
-### 2. Configure Environment Variables
-
-Create a `.env.local` file in the root directory: you can use a template.env file
-
----
-
-### 4. Prisma Setup
-
-#### a. Initialize Prisma
-
-Run the following command to initialize Prisma and create the SQLite database:
-
+3. Set up environment variables:
+Create a `.env` file in the root directory with the following variables:
 ```bash
-npx prisma migrate dev --name init
+# Database
+DATABASE_URL="file:./dev.db"  # SQLite for development
+# DATABASE_URL="postgresql://user:password@localhost:5432/database"  # PostgreSQL for production
+
+# Google OAuth
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+# NextAuth
+NEXTAUTH_SECRET="your-nextauth-secret"
+
+# Admin Access
+GOOGLE_WHITELIST="admin@example.com,user@example.com"
+
+# Network Configuration
+NETWORK="testnet"  # or "mainnet"
+ACCOUNT_ADDRESS="0x..."  # Fee delegation account address
+FEE_PAYER_PRIVATE_KEY="your-private-key"  # Private key for fee delegation
+
+# RPC Configuration
+RPC_URL="https://rpc-endpoint-1,https://rpc-endpoint-2"  # Comma-separated RPC endpoints
+
+# API Configuration
+NEXT_PUBLIC_API_URL="http://localhost:3000/api"  # Frontend API URL
+
+# SMTP Configuration (for email alerts)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT="587"
+SMTP_USER="your-email@gmail.com"
+SMTP_PASS="your-app-password"
+FROM_EMAIL="noreply@yourdomain.com"
+
+# Pool Warning Thresholds (optional)
+NEXT_PUBLIC_POOL_WARNING_RED="10"  # Red warning threshold
+NEXT_PUBLIC_POOL_WARNING_ORANGE="20"  # Orange warning threshold
+
+# Server Configuration
+PORT="3000"  # Server port (optional, defaults to 3000)
+NODE_ENV="development"  # Environment (development/production)
 ```
 
-#### b. Generate Prisma Client
-
-Generate the Prisma client with the command:
-
+4. Set up the database:
 ```bash
-npx prisma generate
+npm run db:generate
+npm run db:push
 ```
 
----
-
-### 5. Start the Server
-
-Run the server in development mode:
-
+5. Run the development server:
 ```bash
 npm run dev
 ```
 
-The server will start at `http://localhost:3000`.
+The application will be available at `http://localhost:3000`.
 
----
+### Available Scripts
 
-## API Endpoints
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm start` - Start production server
+- `npm run lint` - Run ESLint
+- `npm run db:generate` - Generate Prisma client
+- `npm run db:push` - Push database schema
+- `npm run db:migrate` - Run database migrations
+- `npm run db:studio` - Open Prisma Studio
 
-### **`POST /api/signAsFeePayer`**
+### Production
 
-#### Request
+Build and start the production server:
+```bash
+npm run build
+npm start
+```
 
-Your contract address should be registered via management UI
+## Development
 
-- **Header:**
-  ```json
-  {
-    "Content-Type": "application/json",
-  }
-  ```
+- **Frontend**: Next.js app in the `app/` directory (TypeScript)
+- **Backend**: Express routes in the `backend/routes/` directory (JavaScript)
+- **Database**: Prisma schema in `backend/prisma/schema.prisma`
+- **Authentication**: NextAuth configuration in `lib/auth-options.ts`
 
-- **Body:**
-  ```json
-  {
-    "userSignedTx": "<your-rlp-encoded-signed-transaction>"
-  }
-  ```
+### API Documentation
 
-#### Response
+- **Swagger UI**: Available at `http://localhost:3000/api/docs`
+- **OpenAPI Spec**: Available at `http://localhost:3000/api/openapi.json`
 
-- **Success:**
-  ```json
-  {
-    "message": "Request was successful",
-    "data": {
-      /* transaction receipt details */
-    }
-  }
-  ```
-- **Error:**
-  ```json
-  {
-    "message": "Error details",
-    "data": "message"
-  }
-  ```
+### Database Management
 
----
+- **Prisma Studio**: Run `npm run db:studio` to open database GUI
+- **Migrations**: Run `npm run db:migrate` to apply database changes
+- **Schema Push**: Run `npm run db:push` to sync schema changes
+
+## Architecture
+
+This project combines Next.js and Node.js to provide:
+
+1. **Next.js**: Handles the frontend, NextAuth authentication, and static file serving
+2. **Express**: Handles API endpoints and business logic
+3. **Custom Server**: `server.js` coordinates between Next.js and Express
+
+The custom server (`server.js`) serves as the entry point, routing API requests to Express routes and all other requests to Next.js.
+
+### Technology Stack
+
+- **Frontend**: Next.js 15, React 19, TypeScript
+- **Backend**: Express.js, Node.js, JavaScript
+- **Database**: Prisma ORM, SQLite (dev) / PostgreSQL (prod)
+- **Authentication**: NextAuth.js, Google OAuth
+- **Blockchain**: Ethers.js for transaction handling
+- **Documentation**: Swagger/OpenAPI
+- **Development**: ESLint, Tailwind CSS
+
+### Environment Variables
+
+Required environment variables:
+
+```env
+# Database
+DATABASE_URL="file:./dev.db"  # SQLite for development
+
+# Google OAuth
+GOOGLE_CLIENT_ID="your-google-client-id"
+GOOGLE_CLIENT_SECRET="your-google-client-secret"
+
+# NextAuth
+NEXTAUTH_SECRET="your-nextauth-secret"
+
+# Admin Access
+GOOGLE_WHITELIST="admin@example.com,user@example.com"
+
+# Network Configuration
+NETWORK="testnet"  # or "mainnet"
+ACCOUNT_ADDRESS="0x..."  # Fee delegation account address
+FEE_PAYER_PRIVATE_KEY="your-private-key"  # Private key for fee delegation
+
+# RPC Configuration
+RPC_URL="https://rpc-endpoint-1,https://rpc-endpoint-2"  # Comma-separated RPC endpoints
+
+# API Configuration
+NEXT_PUBLIC_API_URL="http://localhost:3000/api"  # Frontend API URL
+
+# SMTP Configuration (for email alerts)
+SMTP_HOST="smtp.gmail.com"
+SMTP_PORT="587"
+SMTP_USER="your-email@gmail.com"
+SMTP_PASS="your-app-password"
+FROM_EMAIL="noreply@yourdomain.com"
+
+# Pool Warning Thresholds (optional)
+NEXT_PUBLIC_POOL_WARNING_RED="10"  # Red warning threshold
+NEXT_PUBLIC_POOL_WARNING_ORANGE="20"  # Orange warning threshold
+
+# Server Configuration
+PORT="3000"  # Server port (optional, defaults to 3000)
+NODE_ENV="development"  # Environment (development/production)
+```
 
 ## Contributing
 
-Contributions are welcome! Feel free to submit a pull request or open an issue for discussion.
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test thoroughly
+5. Submit a pull request
 
----
+## Troubleshooting
+
+### Common Issues
+
+**Database Connection Error**
+```bash
+# Ensure database is running and DATABASE_URL is correct
+npm run db:push
+```
+
+**Authentication Issues**
+- Verify Google OAuth credentials in `.env`
+- Check `GOOGLE_WHITELIST` contains your email
+
+**API Endpoints Not Working**
+- Check if Express server is running
+- Verify API routes in `backend/routes/`
+- Check server logs for errors
+
+**Prisma Issues**
+```bash
+# Regenerate Prisma client
+npm run db:generate
+
+# Reset database (WARNING: This will delete all data)
+npx prisma migrate reset --schema=./backend/prisma/schema.prisma
+```
+
+**Fee Delegation Issues**
+- Verify `ACCOUNT_ADDRESS` is set correctly
+- Check if DApp has sufficient balance
+- Ensure contract/sender is whitelisted or API key is valid
 
 ## License
 
-This project is licensed under the MIT License.
-
-```
-
-```
+[Your License Here]
