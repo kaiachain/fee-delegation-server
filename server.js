@@ -31,6 +31,11 @@ app.prepare().then(() => {
   server.use(express.json({ limit: '10mb' }));
   server.use(express.urlencoded({ extended: true }));
 
+  // Health check endpoint for Docker
+  server.get('/api/health', (req, res) => {
+    res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
+  });
+
   // API Routes (excluding auth which is handled by NextAuth in Next.js)
   server.use('/api/dapps', dappsRoutes);
   server.use('/api/contracts', contractsRoutes);
