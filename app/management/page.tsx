@@ -21,7 +21,6 @@ export default function Management() {
   const [isSortMenuOpen, setIsSortMenuOpen] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
 
-
   const getDapps = async () => {
     const result = await fetchData("/dapps/management", { method: "GET" }, session);
     if (!result.status) {

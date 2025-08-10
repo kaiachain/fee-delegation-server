@@ -47,8 +47,19 @@ export default function NavBar() {
   const handleImageError = () => setProfileImage(defaultProfilePic);
 
   const handleSignOut = async () => {
-    await signOut({ redirect: false });
-    router.push('/rank');
+    try {
+      await signOut({ 
+        redirect: false
+      });
+      // Use router.push after a small delay to ensure signout completes
+      setTimeout(() => {
+        router.push('/rank');
+      }, 100);
+    } catch (error) {
+      console.error('Signout error:', error);
+      // Fallback to direct navigation
+      router.push('/rank');
+    }
   };
 
   useEffect(() => {
@@ -60,7 +71,7 @@ export default function NavBar() {
 
   useEffect(() => {
     if (session?.sessionExpired) {
-      signOut();
+      signOut({ redirect: false });
       return;
     }
     if (session) {
