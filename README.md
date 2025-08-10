@@ -196,18 +196,58 @@ PORT="3000"  # Server port (optional, defaults to 3000)
 NODE_ENV="development"  # Environment (development/production)
 ```
 
-4. Set up the database:
+4. Generate Prisma client:
 ```bash
 npm run db:generate
+```
+
+5. Push database schema:
+```bash
 npm run db:push
 ```
 
-5. Run the development server:
+6. Run the development server:
 ```bash
 npm run dev
 ```
 
-The application will be available at `http://localhost:3000`.
+## Docker Deployment
+
+### Manual Docker Build
+
+1. **Build the image:**
+```bash
+docker build -t fee-delegation-server .
+```
+
+2. **Run the container:**
+```bash
+docker run -d \
+  --name fee-delegation-server \
+  -p 3000:3000 \
+  --env-file .env \
+  fee-delegation-server
+```
+
+### Docker Features
+
+- **Multi-stage build** for optimized production images
+- **Health checks** for container monitoring
+- **Non-root user** for security
+- **Signal handling** with dumb-init
+- **Environment variable** support
+- **Volume mounting** for database persistence
+- **Network isolation** with custom bridge network
+
+### Production Considerations
+
+- Use PostgreSQL instead of SQLite for production
+- Set appropriate resource limits
+- Configure logging and monitoring
+- Use secrets management for sensitive data
+- Set up proper backup strategies
+
+## Development
 
 ### Available Scripts
 
@@ -227,6 +267,8 @@ Build and start the production server:
 npm run build
 npm start
 ```
+
+The application will be available at `http://localhost:3000`.
 
 ## Development
 
@@ -265,6 +307,7 @@ The custom server (`server.js`) serves as the entry point, routing API requests 
 - **Blockchain**: Ethers.js for transaction handling
 - **Documentation**: Swagger/OpenAPI
 - **Development**: ESLint, Tailwind CSS
+- **Containerization**: Docker
 
 ### Environment Variables
 
