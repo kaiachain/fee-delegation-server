@@ -27,6 +27,7 @@ export const authOptions = {
       session.user.email = token.email as string;
       session.user.image = token.picture as string;
       session.user.name = token.name as string;
+      // Ensure idToken is available for backend API calls
       session.idToken = token.idToken as string;
       session.idTokenExpires = token.expiresAt as number;
       const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
@@ -46,8 +47,16 @@ export const authOptions = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET,
-  pages: {
-    signIn: "/auth/signin",
+  secret: process.env.NEXTAUTH_SECRET || "fallback-secret-for-development",
+  debug: process.env.NODE_ENV === 'development',
+  // Add these options to improve compatibility
+  session: {
+    strategy: "jwt" as const,
+  },
+  // Add error handling
+  events: {
+    async signOut() {
+      // Clean up any necessary resources
+    },
   },
 }; 

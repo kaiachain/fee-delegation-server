@@ -1,0 +1,85 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model DApp {
+  id              String     @id @default(cuid())
+  name            String     @unique
+  url             String
+  balance         String     @default("0")
+  totalUsed       String     @default("0")
+  createdAt       DateTime   @default(now())
+  active          Boolean    @default(true)
+  terminationDate String?
+  contracts       Contract[]
+  senders         Sender[]
+  apiKeys         ApiKey[]
+  emailAlerts     EmailAlert[]
+}
+
+model ApiKey {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  name      String
+  active    Boolean  @default(true)
+  dapp      DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId    String
+  createdAt DateTime @default(now())
+
+  @@index([dappId], map: "ApiKey_dappId_fkey")
+}
+
+model Contract {
+  id          String   @id @default(cuid())
+  address     String
+  hasSwap     Boolean  @default(false)
+  swapAddress String?
+  active      Boolean  @default(true)
+  dapp        DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId      String
+  createdAt   DateTime @default(now())
+
+  @@unique([address, dappId, swapAddress])
+  @@index([dappId], map: "Contract_dappId_fkey")
+}
+
+model Sender {
+  id        String   @id @default(cuid())
+  address   String
+  active    Boolean  @default(true)
+  dappId    String
+  dapp      DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+
+  @@unique([address, dappId])
+  @@index([dappId], map: "Sender_dappId_fkey")
+}
+
+model EmailAlert {
+  id              String   @id @default(cuid())
+  email           String
+  balanceThreshold String
+  isActive        Boolean  @default(true)
+  dapp            DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId          String
+  createdAt       DateTime @default(now())
+
+  @@index([dappId], map: "EmailAlert_dappId_fkey")
+}
+
+model EmailAlertLog {
+  id        String   @id @default(cuid())
+  email     String
+  dappId    String
+  dappName  String
+  newBalance String
+  threshold String
+  sentAt    DateTime @default(now())
+  isRead    Boolean  @default(false)
+
+  @@index([dappId], map: "EmailAlertLog_dappId_fkey")
+}

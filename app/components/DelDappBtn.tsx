@@ -1,6 +1,11 @@
 import React, { useState } from "react";
 import Modal from "react-modal";
 
+interface Dapp {
+  id: string;
+  name?: string;
+}
+
 export default function DelDappBtn({ dapp, deleteDapp }: any) {
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
 
@@ -8,6 +13,8 @@ export default function DelDappBtn({ dapp, deleteDapp }: any) {
     setIsConfirmModalOpen(false);
     deleteDapp(dapp.id);
   };
+
+  const dappName = dapp?.name || 'this DApp';
 
   return (
     <>
@@ -39,7 +46,7 @@ export default function DelDappBtn({ dapp, deleteDapp }: any) {
           </div>
           <h2 className="text-xl font-bold text-gray-900 text-center mb-2">Delete DApp</h2>
           <p className="text-gray-600 text-center mb-6">
-            Are you sure you want to delete <span className="font-semibold">{dapp.name}</span>? This action cannot be undone.
+            Are you sure you want to delete <span className="font-semibold">{dappName}</span>? This action cannot be undone.
           </p>
           <div className="flex justify-end gap-3">
             <button

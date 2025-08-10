@@ -1,0 +1,57 @@
+const express = require('express');
+const next = require('next');
+const path = require('path');
+
+const dev = process.env.NODE_ENV !== 'production';
+const app = next({ dev });
+const handle = app.getRequestHandler();
+
+// Import backend routes
+const dappsRoutes = require('./backend/routes/dapps');
+const contractsRoutes = require('./backend/routes/contracts');
+const sendersRoutes = require('./backend/routes/senders');
+const balanceRoutes = require('./backend/routes/balance');
+const apiKeysRoutes = require('./backend/routes/apiKeys');
+const poolRoutes = require('./backend/routes/pool');
+const emailAlertsRoutes = require('./backend/routes/emailAlerts');
+const emailAlertLogsRoutes = require('./backend/routes/emailAlertLogs');
+const docsRoutes = require('./backend/routes/docs');
+const openapiRoutes = require('./backend/routes/openapi');
+const signAsFeePayerRoutes = require('./backend/routes/signAsFeePayer');
+
+app.prepare().then(() => {
+  const server = express();
+
+  // Handle NextAuth routes first, before any middleware
+  server.all('/api/auth/*', (req, res) => {
+    return handle(req, res);
+  });
+
+  // Middleware for other routes
+  server.use(express.json({ limit: '10mb' }));
+  server.use(express.urlencoded({ extended: true }));
+
+  // API Routes (excluding auth which is handled by NextAuth in Next.js)
+  server.use('/api/dapps', dappsRoutes);
+  server.use('/api/contracts', contractsRoutes);
+  server.use('/api/senders', sendersRoutes);
+  server.use('/api/balance', balanceRoutes);
+  server.use('/api/api-keys', apiKeysRoutes);
+  server.use('/api/pool', poolRoutes);
+  server.use('/api/email-alerts', emailAlertsRoutes);
+  server.use('/api/email-alert-logs', emailAlertLogsRoutes);
+  server.use('/api/docs', docsRoutes);
+  server.use('/api/openapi.json', openapiRoutes);
+  server.use('/api/signAsFeePayer', signAsFeePayerRoutes);
+
+  // Handle all other requests with Next.js
+  server.all('*', (req, res) => {
+    return handle(req, res);
+  });
+
+  const port = process.env.PORT || 3000;
+  server.listen(port, (err) => {
+    if (err) throw err;
+    console.log(`> Ready on http://localhost:${port}`);
+  });
+}); 

@@ -204,21 +204,67 @@ export default function AddDappModal({
 
   const handleBalanceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Remove leading zeros and convert to number
-    const cleanValue = value.replace(/^0+/, '') || '0';
-    // Only allow numbers
-    if (/^\d*$/.test(cleanValue)) {
-      setBalance(Number(cleanValue));
+    
+    // Allow decimal numbers (floats) and strip leading zeros
+    if (/^\d*\.?\d*$/.test(value)) {
+      // Strip leading zeros but keep decimal point
+      let cleanValue = value;
+      if (value.includes('.')) {
+        // For decimal numbers, strip leading zeros before decimal point
+        const [wholePart, decimalPart] = value.split('.');
+        const cleanWholePart = wholePart.replace(/^0+/, '') || '0';
+        cleanValue = cleanWholePart + '.' + decimalPart;
+      } else {
+        // For whole numbers, strip leading zeros
+        cleanValue = value.replace(/^0+/, '') || '0';
+      }
+      
+      // Convert to number, but handle empty string and single decimal point
+      let numValue = 0;
+      if (cleanValue === '' || cleanValue === '.') {
+        numValue = 0;
+      } else if (cleanValue.endsWith('.')) {
+        // Don't convert yet if ending with decimal point
+        setBalance(0); // Set to 0 temporarily to allow typing
+        return;
+      } else {
+        numValue = Number(cleanValue) || 0;
+      }
+      
+      setBalance(numValue);
     }
   };
 
   const handleBalanceThresholdChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
-    // Remove leading zeros and convert to number
-    const cleanValue = value.replace(/^0+/, '') || '0';
-    // Only allow numbers
-    if (/^\d*$/.test(cleanValue)) {
-      setNewEmailAlert({...newEmailAlert, balanceThreshold: Number(cleanValue)});
+    
+    // Allow decimal numbers (floats) and strip leading zeros
+    if (/^\d*\.?\d*$/.test(value)) {
+      // Strip leading zeros but keep decimal point
+      let cleanValue = value;
+      if (value.includes('.')) {
+        // For decimal numbers, strip leading zeros before decimal point
+        const [wholePart, decimalPart] = value.split('.');
+        const cleanWholePart = wholePart.replace(/^0+/, '') || '0';
+        cleanValue = cleanWholePart + '.' + decimalPart;
+      } else {
+        // For whole numbers, strip leading zeros
+        cleanValue = value.replace(/^0+/, '') || '0';
+      }
+      
+      // Convert to number, but handle empty string and single decimal point
+      let numValue = 0;
+      if (cleanValue === '' || cleanValue === '.') {
+        numValue = 0;
+      } else if (cleanValue.endsWith('.')) {
+        // Don't convert yet if ending with decimal point
+        setNewEmailAlert({...newEmailAlert, balanceThreshold: 0}); // Set to 0 temporarily to allow typing
+        return;
+      } else {
+        numValue = Number(cleanValue) || 0;
+      }
+      
+      setNewEmailAlert({...newEmailAlert, balanceThreshold: numValue});
     }
   };
 
@@ -433,10 +479,21 @@ export default function AddDappModal({
                 </label>
                 <div className="relative">
                   <input
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    value={balance}
+                    type="number"
+                    step="0.000000000000000001"
+                    inputMode="decimal"
+                    value={(() => {
+                      // Display cleaned value without leading zeros, show 0 when cleared
+                      if (balance === 0) return '0';
+                      const balanceStr = balance.toString();
+                      if (balanceStr.includes('.')) {
+                        const [wholePart, decimalPart] = balanceStr.split('.');
+                        const cleanWholePart = wholePart.replace(/^0+/, '') || '0';
+                        return cleanWholePart + '.' + decimalPart;
+                      } else {
+                        return balanceStr.replace(/^0+/, '') || '0';
+                      }
+                    })()}
                     onChange={handleBalanceChange}
                     className="w-full pl-4 pr-12 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
                     placeholder="Enter balance"
@@ -516,12 +573,23 @@ export default function AddDappModal({
                       <label className="block text-sm font-medium text-gray-700">Balance Threshold</label>
                       <div className="relative">
                         <input
-                          type="text"
-                          inputMode="numeric"
-                          pattern="[0-9]*"
-                          value={newEmailAlert.balanceThreshold}
+                          type="number"
+                          step="0.000000000000000001"
+                          inputMode="decimal"
+                          value={(() => {
+                            // Display cleaned value without leading zeros, show 0 when cleared
+                            if (newEmailAlert.balanceThreshold === 0) return '0';
+                            const thresholdStr = newEmailAlert.balanceThreshold.toString();
+                            if (thresholdStr.includes('.')) {
+                              const [wholePart, decimalPart] = thresholdStr.split('.');
+                              const cleanWholePart = wholePart.replace(/^0+/, '') || '0';
+                              return cleanWholePart + '.' + decimalPart;
+                            } else {
+                              return thresholdStr.replace(/^0+/, '') || '0';
+                            }
+                          })()}
                           onChange={handleBalanceThresholdChange}
-                          className="w-full pl-4 pr-12 py-2.5 border border-green-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                          className="w-full pl-4 pr-12 py-2.5 border border-green-200 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
                           placeholder="Enter threshold"
                         />
                         <div className="absolute inset-y-0 right-0 flex items-center pr-3 pointer-events-none">
