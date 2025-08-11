@@ -28,13 +28,6 @@ const createResponse = (res, type, data) => {
   return res.status(status).json(payload);
 };
 
-const formattedBalance = (balance) => {
-  return (
-    (parseFloat(ethers.formatUnits(balance)) * 10 ** 5) /
-    10 ** 5
-  ).toFixed(5);
-};
-
 const checkWhitelistedContractsWithoutAPIkey = async (address) => {
   if (!address) {
     return false;
@@ -468,7 +461,6 @@ const getDappByApiKey = async (apiKey) => {
 
 module.exports = {
   createResponse,
-  formattedBalance,
   checkWhitelistedContractsWithoutAPIkey,
   checkWhitelistedSendersWithoutAPIkey,
   getDappfromContract,

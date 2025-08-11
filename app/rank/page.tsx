@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchPublicData } from "@/lib/apiUtils";
+import { formatBalance } from "@/lib/balanceUtils";
 
 export default function Page() {
   const [dapps, setDapps] = useState<any[]>([]);
@@ -75,13 +76,13 @@ export default function Page() {
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <p className="text-sm font-medium text-gray-500">Total Usage</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {Number(dapps.reduce((acc, dapp) => acc + Number(dapp.totalUsed), 0).toFixed(5)).toLocaleString()}
+                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.totalUsed), 0).toString())}
               </p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <p className="text-sm font-medium text-gray-500">Total Balance</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {Number(dapps.reduce((acc, dapp) => acc + Number(dapp.balance), 0).toFixed(5)).toLocaleString()}
+                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.balance), 0).toString())}
               </p>
             </div>
           </div>
@@ -141,10 +142,10 @@ export default function Page() {
                         </a>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{Number(dapp.totalUsed).toFixed(5)}</div>
+                        <div className="text-sm text-gray-900">{formatBalance(dapp.totalUsed)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{Number(dapp.balance).toFixed(5)}</div>
+                        <div className="text-sm text-gray-900">{formatBalance(dapp.balance)}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm text-gray-500">

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
-const { createResponse, formattedBalance, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
+const { createResponse, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
 const { requireEditor } = require('../middleware/auth');
 
 
@@ -19,13 +19,7 @@ router.get('/', async (req, res) => {
       }
     });
     
-    const formattedDapps = dapps.map((dapp) => ({
-      ...dapp,
-      totalUsed: formattedBalance(dapp.totalUsed),
-      balance: formattedBalance(dapp.balance)
-    }));
-
-    return createResponse(res, "SUCCESS", formattedDapps);
+    return createResponse(res, "SUCCESS", dapps);
   } catch (error) {
     console.error("Error fetching dapps:", error);
     return createResponse(res, "INTERNAL_ERROR", "Failed to fetch dapps");
@@ -522,8 +516,6 @@ router.get('/management', requireEditor, async (req, res) => {
 
       return {
         ...dapp,
-        totalUsed: formattedBalance(dapp.totalUsed),
-        balance: formattedBalance(dapp.balance),
         emailAlerts: dapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: ethers.formatUnits(alert.balanceThreshold, 18)
