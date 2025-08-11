@@ -37,4 +37,73 @@ router.get('/', requireEditor, async (req, res) => {
   }
 });
 
+// PUT /api/email-alert-logs - Mark as read
+router.put('/', requireEditor, async (req, res) => {
+  try {
+    const { id, dappId, markAllAsRead } = req.body;
+
+    // Validate request
+    if (!id && !dappId && !markAllAsRead) {
+      return createResponse(res, "BAD_REQUEST", "Either id, dappId, or markAllAsRead must be provided");
+    }
+
+    let result;
+
+    if (markAllAsRead) {
+      // Mark all unread logs as read
+      result = await prisma.emailAlertLog.updateMany({
+        where: {
+          isRead: false
+        },
+        data: {
+          isRead: true
+        }
+      });
+      
+      console.log(`Marked ${result.count} email alert logs as read`);
+      return createResponse(res, "SUCCESS", { 
+        message: `Marked ${result.count} email alert logs as read`,
+        count: result.count 
+      });
+    }
+
+    if (id) {
+      // Mark specific log as read by ID
+      result = await prisma.emailAlertLog.update({
+        where: { id },
+        data: { isRead: true }
+      });
+      
+      console.log(`Marked email alert log ${id} as read`);
+      return createResponse(res, "SUCCESS", { 
+        message: "Email alert log marked as read",
+        log: result 
+      });
+    }
+
+    if (dappId) {
+      // Mark all logs for a specific DApp as read
+      result = await prisma.emailAlertLog.updateMany({
+        where: {
+          dappId,
+          isRead: false
+        },
+        data: {
+          isRead: true
+        }
+      });
+      
+      console.log(`Marked ${result.count} email alert logs for DApp ${dappId} as read`);
+      return createResponse(res, "SUCCESS", { 
+        message: `Marked ${result.count} email alert logs for DApp ${dappId} as read`,
+        count: result.count 
+      });
+    }
+
+  } catch (error) {
+    console.error("Error marking email alert logs as read:", error);
+    return createResponse(res, "INTERNAL_ERROR", `Failed to mark email alert logs as read: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+});
+
 module.exports = router; 
