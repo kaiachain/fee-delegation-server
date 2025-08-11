@@ -157,6 +157,7 @@ Create a `.env` file in the root directory with the following variables:
 ```bash
 # Database
 DATABASE_URL="file:./dev.db"  # SQLite for development, Also change the schema.prisma accordingly for sqlite provider
+
 # DATABASE_URL="postgresql://user:password@localhost:5432/database"  # PostgreSQL for production
 
 # Google OAuth
