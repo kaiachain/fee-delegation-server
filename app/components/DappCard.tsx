@@ -1,4 +1,3 @@
-import { ethers } from "ethers";
 import React, { useState, useEffect } from "react";
 import EditModal from "./EditModal";
 import EditDappModal from "./EditDappModal";
@@ -10,6 +9,7 @@ import StatsModal from './StatsModal';
 import ErrorModal from "./ErrorModal";
 import Modal from "react-modal";
 import DelDappBtn from "./DelDappBtn";
+import { formatBalanceWithSymbol } from "@/lib/balanceUtils";
 
 interface DappCardProps {
   dapp: Dapp;
@@ -233,7 +233,7 @@ const DappCard: React.FC<DappCardProps> = ({ dapp, children, deleteDapp }) => {
                   )}
                 </div>
                 <div className="flex items-center">
-                  <span className="text-gray-600">{dappInfo.balance} KAIA</span>
+                  <span className="text-gray-600">{formatBalanceWithSymbol(dappInfo.balance)}</span>
                 </div>
               </div>
             </div>
@@ -248,7 +248,7 @@ const DappCard: React.FC<DappCardProps> = ({ dapp, children, deleteDapp }) => {
             <div className="flex items-center min-w-0">
               <div className="flex flex-col min-w-0">
                 <span className="text-xs text-gray-500 mb-0.5">Total Used</span>
-                <span className="text-gray-600">{dappInfo.totalUsed} KAIA</span>
+                <span className="text-gray-600">{formatBalanceWithSymbol(dappInfo.totalUsed || "0")}</span>
               </div>
             </div>
           </div>

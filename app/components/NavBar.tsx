@@ -5,10 +5,15 @@ import Link from "next/link";
 import { signIn, signOut, useSession } from "next-auth/react";
 import { fetchData } from "@/lib/apiUtils";
 import { useRouter, usePathname } from "next/navigation";
+import { formatBalance } from "@/lib/balanceUtils";
 
-// Environment variables for pool balance thresholds
+// Environment variables for pool balance thresholds (in KAIA)
 const POOL_WARNING_RED = Number(process.env.NEXT_PUBLIC_POOL_WARNING_RED) || 10;
 const POOL_WARNING_ORANGE = Number(process.env.NEXT_PUBLIC_POOL_WARNING_ORANGE) || 20;
+
+// Convert KAIA thresholds to wei for comparison
+const POOL_WARNING_RED_WEI = POOL_WARNING_RED * 10 ** 18;
+const POOL_WARNING_ORANGE_WEI = POOL_WARNING_ORANGE * 10 ** 18;
 
 export default function NavBar() {
   const [isVisible, setIsVisible] = useState(false);
@@ -202,16 +207,16 @@ export default function NavBar() {
                               </svg>
                             </div>
                             <div className={`absolute -top-1 -right-1 w-3 h-3 rounded-full ring-2 ring-gray-800 ${
-                              Number(poolBalance) > POOL_WARNING_ORANGE 
+                              Number(poolBalance) > POOL_WARNING_ORANGE_WEI 
                                 ? 'bg-green-400' 
-                                : Number(poolBalance) > POOL_WARNING_RED 
+                                : Number(poolBalance) > POOL_WARNING_RED_WEI 
                                   ? 'bg-orange-400' 
                                   : 'bg-red-400'
                             }`}>
                               <div className={`w-full h-full rounded-full animate-ping opacity-75 ${
-                                Number(poolBalance) > POOL_WARNING_ORANGE 
+                                Number(poolBalance) > POOL_WARNING_ORANGE_WEI 
                                   ? 'bg-green-400' 
-                                  : Number(poolBalance) > POOL_WARNING_RED 
+                                  : Number(poolBalance) > POOL_WARNING_RED_WEI 
                                     ? 'bg-orange-400' 
                                     : 'bg-red-400'
                               }`}></div>
@@ -220,12 +225,12 @@ export default function NavBar() {
                           <div className="flex flex-col">
                             <span className="text-xs text-gray-400 group-hover:text-blue-400 transition-colors duration-200">Fee Pool</span>
                             <span className={`text-sm font-semibold group-hover:text-blue-100 transition-colors duration-200 ${
-                              Number(poolBalance) > POOL_WARNING_ORANGE 
+                              Number(poolBalance) > POOL_WARNING_ORANGE_WEI 
                                 ? 'text-green-400' 
-                                : Number(poolBalance) > POOL_WARNING_RED 
+                                : Number(poolBalance) > POOL_WARNING_RED_WEI 
                                   ? 'text-orange-400' 
                                   : 'text-red-400'
-                            }`}>{poolBalance} KAIA</span>
+                            }`}>{formatBalance(poolBalance)} KAIA</span>
                           </div>
                         </div>
                         <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 opacity-0 group-hover:opacity-100 transition-opacity duration-300 rounded-lg"></div>
