@@ -1,8 +1,13 @@
+const dev = process.env.NODE_ENV !== 'production';
+
+if(!dev) {
+  require('dotenv').config({ path: '.env.production' });
+}
+
 const express = require('express');
 const next = require('next');
 const path = require('path');
 
-const dev = process.env.NODE_ENV !== 'production';
 const app = next({ dev });
 const handle = app.getRequestHandler();
 
