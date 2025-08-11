@@ -26,12 +26,12 @@ WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
+COPY .env.production ./.env.production
 
 # Install only production dependencies
 RUN npm install && npm cache clean --force
 
 # Copy built application
-COPY --from=build /app/.env.production ./.env.production
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/backend ./backend
