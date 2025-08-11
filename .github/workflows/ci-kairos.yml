@@ -38,7 +38,7 @@ jobs:
             API_URL: ${{ vars.KAIROS_API_URL }}
         run: |
             echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
-            cat .env.production
+            cat .env
             docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
             docker push $ECR_REGISTRY/$ECR_REPOSITORY -a
 
