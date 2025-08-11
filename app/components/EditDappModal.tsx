@@ -2,12 +2,13 @@
 
 import React, { useState, useRef, useEffect } from "react";
 import Modal from "react-modal";
-import { ethers } from "ethers";
 import { useSession } from "next-auth/react";
 import { fetchData } from "@/lib/apiUtils";
 import { Dapp, Contract, Sender, ApiKey, EmailAlert } from "../types/index";
 import ErrorModal from "./ErrorModal";
 import crypto from "crypto";
+import { formatBalance } from "@/lib/balanceUtils";
+import { ethers } from "ethers";
 
 interface EditDappModalProps {
   isModalOpen: boolean;
@@ -30,7 +31,7 @@ export default function EditDappModal({
   // Basic Information
   const [name, setName] = useState(dapp.name);
   const [url, setUrl] = useState(dapp.url);
-  const [balance, setBalance] = useState<number>(Number(dapp.balance));
+  const [balance, setBalance] = useState<number>(Number(ethers.formatUnits(dapp.balance || "0", "ether")));
   const [terminationDate, setTerminationDate] = useState<string>("");
   
   // Contracts and Senders
@@ -50,7 +51,7 @@ export default function EditDappModal({
   const [emailAlerts, setEmailAlerts] = useState<Array<{email: string, balanceThreshold: number, isActive: boolean}>>(
     (dapp.emailAlerts || []).map(alert => ({
       email: alert.email,
-      balanceThreshold: Number(alert.balanceThreshold),
+      balanceThreshold: Number(ethers.formatUnits(alert.balanceThreshold || "0", "ether")),
       isActive: alert.isActive
     }))
   );
@@ -86,14 +87,14 @@ export default function EditDappModal({
     if (isModalOpen && dapp) {
       setName(dapp.name);
       setUrl(dapp.url);
-      setBalance(Number(dapp.balance));
+      setBalance(Number(ethers.formatUnits(dapp.balance || "0", "ether")));
       setTerminationDate(convertUTCtoKST(dapp.terminationDate || ""));
       setContracts(dapp.contracts || []);
       setSenders(dapp.senders || []);
       setApiKeys(dapp.apiKeys || []);
       setEmailAlerts((dapp.emailAlerts || []).map(alert => ({
         email: alert.email,
-        balanceThreshold: Number(alert.balanceThreshold),
+        balanceThreshold: Number(ethers.formatUnits(alert.balanceThreshold || "0", "ether")),
         isActive: alert.isActive
       })));
     }

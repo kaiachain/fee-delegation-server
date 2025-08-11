@@ -9,7 +9,7 @@ import StatsModal from './StatsModal';
 import ErrorModal from "./ErrorModal";
 import Modal from "react-modal";
 import DelDappBtn from "./DelDappBtn";
-import { formatBalanceWithSymbol } from "@/lib/balanceUtils";
+import { formatBalanceWithSymbol, formatBalance } from "@/lib/balanceUtils";
 
 interface DappCardProps {
   dapp: Dapp;
@@ -458,7 +458,7 @@ const DappCard: React.FC<DappCardProps> = ({ dapp, children, deleteDapp }) => {
                       </span>
                     </div>
                     <div className="text-sm text-green-700">
-                      Alert when balance falls below {alert.balanceThreshold} KAIA
+                      Alert when balance falls below {formatBalance(alert.balanceThreshold)} KAIA
                     </div>
                   </div>
                 </div>

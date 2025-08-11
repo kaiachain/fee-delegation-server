@@ -52,7 +52,7 @@ export default function EmailAlertsPage() {
     try {
       const result = await fetchData("/email-alert-logs", {
         method: "PUT",
-        body: { id: logId, isRead: true }
+        body: { id: logId }
       }, session);
       
       if (result.status) {
@@ -64,6 +64,42 @@ export default function EmailAlertsPage() {
       }
     } catch (error) {
       console.error("Failed to mark as read:", error);
+    }
+  };
+
+  const markDappAsRead = async (dappId: string) => {
+    try {
+      const result = await fetchData("/email-alert-logs", {
+        method: "PUT",
+        body: { dappId }
+      }, session);
+      
+      if (result.status) {
+        setEmailAlertLogs(prev => 
+          prev.map(log => 
+            log.dappId === dappId ? { ...log, isRead: true } : log
+          )
+        );
+      }
+    } catch (error) {
+      console.error("Failed to mark DApp as read:", error);
+    }
+  };
+
+  const markAllAsRead = async () => {
+    try {
+      const result = await fetchData("/email-alert-logs", {
+        method: "PUT",
+        body: { markAllAsRead: true }
+      }, session);
+      
+      if (result.status) {
+        setEmailAlertLogs(prev => 
+          prev.map(log => ({ ...log, isRead: true }))
+        );
+      }
+    } catch (error) {
+      console.error("Failed to mark all as read:", error);
     }
   };
 
@@ -274,6 +310,27 @@ export default function EmailAlertsPage() {
                 </label>
               </div>
             </div>
+
+            {/* Bulk Actions */}
+            <div className="mt-4 flex flex-wrap gap-3">
+              {emailAlertLogs.filter(log => !log.isRead).length > 0 && (
+                <>
+                  <button
+                    onClick={markAllAsRead}
+                    className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition-colors duration-200 flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span>Mark All as Read</span>
+                  </button>
+                  
+                  <span className="text-sm text-gray-500 self-center">
+                    {emailAlertLogs.filter(log => !log.isRead).length} unread alerts
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Stats Overview */}
@@ -302,6 +359,22 @@ export default function EmailAlertsPage() {
 
           {/* Table Section */}
           <div className="overflow-x-auto">
+            <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <h3 className="text-lg font-semibold text-gray-900">Email Alert Logs</h3>
+                <div className="flex items-center space-x-4">
+                  <span className="text-sm text-gray-600">
+                    Total: <span className="font-semibold">{emailAlertLogs.length}</span>
+                  </span>
+                  <span className="text-sm text-yellow-600">
+                    Unread: <span className="font-semibold">{emailAlertLogs.filter(log => !log.isRead).length}</span>
+                  </span>
+                  <span className="text-sm text-green-600">
+                    Read: <span className="font-semibold">{emailAlertLogs.filter(log => log.isRead).length}</span>
+                  </span>
+                </div>
+              </div>
+            </div>
             <table className="min-w-full divide-y divide-gray-200">
               <thead>
                 <tr className="bg-gray-50">
@@ -355,14 +428,28 @@ export default function EmailAlertsPage() {
                       <div className="text-sm text-gray-500">{formatDate(log.sentAt)}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {!log.isRead && (
-                        <button
-                          onClick={() => markAsRead(log.id)}
-                          className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
-                        >
-                          Mark Read
-                        </button>
-                      )}
+                      <div className="flex space-x-2">
+                        {!log.isRead && (
+                          <>
+                            <button
+                              onClick={() => markAsRead(log.id)}
+                              className="text-sm bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 transition-colors"
+                            >
+                              Mark Read
+                            </button>
+                            <button
+                              onClick={() => markDappAsRead(log.dappId)}
+                              className="text-sm bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700 transition-colors"
+                              title={`Mark all alerts for ${log.dappName} as read`}
+                            >
+                              Mark DApp Read
+                            </button>
+                          </>
+                        )}
+                        {log.isRead && (
+                          <span className="text-sm text-gray-400 px-3 py-1">Already read</span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
