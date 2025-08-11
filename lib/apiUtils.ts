@@ -121,9 +121,4 @@ export const fetchPublicData = async (url: string, options: { method?: string; h
   }
 };
 
-export const formattedBalance = (balance: string): string => {
-  return (
-    (parseFloat(ethers.formatUnits(balance)) * 10 ** 5) /
-    10 ** 5
-  ).toFixed(5);
-};
+
