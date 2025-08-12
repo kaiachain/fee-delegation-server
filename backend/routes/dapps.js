@@ -3,7 +3,7 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 
 // GET /api/dapps
@@ -27,7 +27,7 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/dapps
-router.post('/', requireEditor, async (req, res) => {
+router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
     const { name, url, balance, terminationDate, contracts, senders, apiKeys, emailAlerts } = req.body;
@@ -196,7 +196,7 @@ router.post('/', requireEditor, async (req, res) => {
 });
 
 // PUT /api/dapps
-router.put('/', requireEditor, async (req, res) => {
+router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
     const { id, name, url, balance, terminationDate, active, contracts, senders, apiKeys, emailAlerts } = req.body;
@@ -391,7 +391,7 @@ router.put('/', requireEditor, async (req, res) => {
 });
 
 // DELETE /api/dapps
-router.delete('/', requireEditor, async (req, res) => {
+router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
     const { id } = req.body;
@@ -410,7 +410,7 @@ router.delete('/', requireEditor, async (req, res) => {
 });
 
 // GET /api/dapps/management
-router.get('/management', requireEditor, async (req, res) => {
+router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
     const dapps = await prisma.dApp.findMany({

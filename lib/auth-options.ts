@@ -32,7 +32,7 @@ export const authOptions = {
       session.idTokenExpires = token.expiresAt as number;
       const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
       if (admins.includes(session.user.email)) {
-        session.user.role = "editor";
+        session.user.role = "super_admin";
       } else {
         session.user.role = "viewer";
       }

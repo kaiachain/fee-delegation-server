@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // GET /api/email-alerts
-router.get('/', requireEditor, async (req, res) => {
+router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const emailAlerts = await prisma.emailAlert.findMany({
       include: {
@@ -25,7 +25,7 @@ router.get('/', requireEditor, async (req, res) => {
 });
 
 // POST /api/email-alerts
-router.post('/', requireEditor, async (req, res) => {
+router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { dappId, email, balanceThreshold, isActive } = req.body;
 
@@ -50,7 +50,7 @@ router.post('/', requireEditor, async (req, res) => {
 });
 
 // PUT /api/email-alerts
-router.put('/', requireEditor, async (req, res) => {
+router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { id, email, balanceThreshold, isActive } = req.body;
 
@@ -76,7 +76,7 @@ router.put('/', requireEditor, async (req, res) => {
 });
 
 // DELETE /api/email-alerts
-router.delete('/', requireEditor, async (req, res) => {
+router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { id } = req.body;
 

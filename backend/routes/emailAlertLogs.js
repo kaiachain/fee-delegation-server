@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // GET /api/email-alert-logs
-router.get('/', requireEditor, async (req, res) => {
+router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { dappId, email, isRead } = req.query;
 
@@ -38,7 +38,7 @@ router.get('/', requireEditor, async (req, res) => {
 });
 
 // PUT /api/email-alert-logs - Mark as read
-router.put('/', requireEditor, async (req, res) => {
+router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { id, dappId, markAllAsRead } = req.body;
 

@@ -1,4 +1,5 @@
 const { verify } = require('../utils/verifyToken');
+const { verifyEmailJwt } = require('../utils/passwordUtils');
 const { createResponse } = require('../utils/apiUtils');
 
 /**
@@ -17,15 +18,29 @@ const requireAuth = (requiredRole = 'editor') => {
         return res.status(401).json(response);
       }
 
-      const { role } = await verify(token);
+      let role = 'viewer';
+      let email = undefined;
+      try {
+        // Try Google idToken first
+        const google = await verify(token);
+        role = google.role || 'viewer';
+        email = google.email;
+      } catch (_) {
+        // Fallback to email JWT
+        const payload = verifyEmailJwt(token);
+        role = payload.role || 'viewer';
+        email = payload.email;
+      }
       
-      if (role !== requiredRole) {
+      // super_admin always passes editor checks
+      const passes = role === requiredRole || (requiredRole === 'editor' && role === 'super_admin');
+      if (!passes) {
         const response = createResponse("UNAUTHORIZED", "You don't have permission to access this resource");
         return res.status(401).json(response);
       }
 
       // Add user info to request for use in route handlers
-      req.user = { role };
+      req.user = { role, email };
       next();
     } catch (error) {
       console.error("Authentication error:", error);
@@ -41,6 +56,11 @@ const requireAuth = (requiredRole = 'editor') => {
 const requireEditor = requireAuth('editor');
 
 /**
+ * Middleware to verify editor or super_admin role specifically
+ */
+const requireEditorOrSuperAdmin = requireAuth('editor') || requireAuth('super_admin');
+
+/**
  * Middleware to verify any authenticated user
  */
 const requireUser = requireAuth('viewer');
@@ -48,5 +68,6 @@ const requireUser = requireAuth('viewer');
 module.exports = {
   requireAuth,
   requireEditor,
+  requireEditorOrSuperAdmin,
   requireUser
 }; 

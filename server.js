@@ -58,7 +58,7 @@ app.prepare().then(() => {
     next();
   });
 
-  // API Routes (excluding auth which is handled by NextAuth in Next.js)
+  // API Routes (excluding NextAuth which is handled by Next.js)
   server.use('/api/dapps', dappsRoutes);
   server.use('/api/contracts', contractsRoutes);
   server.use('/api/senders', sendersRoutes);
@@ -70,6 +70,9 @@ app.prepare().then(() => {
   server.use('/api/docs', docsRoutes);
   server.use('/api/openapi.json', openapiRoutes);
   server.use('/api/signAsFeePayer', signAsFeePayerRoutes);
+  // Email auth routes
+  server.use('/api/email-auth', require('./backend/routes/emailAuth'));
+  server.use('/api/users', require('./backend/routes/users'));
 
   // Handle all other requests with Next.js
   server.all('*', (req, res) => {
