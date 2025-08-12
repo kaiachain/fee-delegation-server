@@ -76,13 +76,13 @@ export default function Page() {
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <p className="text-sm font-medium text-gray-500">Total Usage</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.totalUsed), 0).toString())}
+                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.totalUsed), 0).toLocaleString().replaceAll(',', ''))}
               </p>
             </div>
             <div className="bg-white p-4 rounded-lg shadow-sm">
               <p className="text-sm font-medium text-gray-500">Total Balance</p>
               <p className="text-2xl font-semibold text-gray-900">
-                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.balance), 0).toString())}
+                {formatBalance(dapps.reduce((acc, dapp) => acc + Number(dapp.balance), 0).toLocaleString().replaceAll(',', ''))}
               </p>
             </div>
           </div>
