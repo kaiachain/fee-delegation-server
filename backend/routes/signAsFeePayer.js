@@ -55,8 +55,6 @@ router.options('/', async (req, res) => {
  *         description: Internal server error
  */
 router.post('/', async (req, res) => {
-  // Set CORS headers for all responses
-  setCorsHeaders(res);
   
   try {
     const { userSignedTx } = req.body || {};
