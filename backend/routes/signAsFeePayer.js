@@ -14,7 +14,7 @@ const {
 } = require('../utils/apiUtils');
 
 // OPTIONS /api/signAsFeePayer
-router.options('/', async (_req, res) => {
+router.options('/', async (req, res) => {
   return createResponse(res, 'SUCCESS', {});
 });
 
@@ -55,6 +55,9 @@ router.options('/', async (_req, res) => {
  *         description: Internal server error
  */
 router.post('/', async (req, res) => {
+  // Set CORS headers for all responses
+  setCorsHeaders(res);
+  
   try {
     const { userSignedTx } = req.body || {};
 
