@@ -127,8 +127,6 @@ router.options('/', async (req, res) => {
  */
 // GET /api/balance
 router.get('/', async (req, res) => {
-  // Set CORS headers for all responses
-  setCorsHeaders(res);
   
   try {
     const address = req.query.address;
