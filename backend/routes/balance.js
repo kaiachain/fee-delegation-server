@@ -4,6 +4,11 @@ const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, isEnoughBalance, checkWhitelistedAndGetDapp, getDappByApiKey } = require('../utils/apiUtils');
 
+// OPTIONS /api/balance - Handle CORS preflight
+router.options('/', async (req, res) => {
+  return createResponse(res, 'SUCCESS', {});
+});
+
 /**
  * @swagger
  * /api/balance:
@@ -122,6 +127,9 @@ const { createResponse, isEnoughBalance, checkWhitelistedAndGetDapp, getDappByAp
  */
 // GET /api/balance
 router.get('/', async (req, res) => {
+  // Set CORS headers for all responses
+  setCorsHeaders(res);
+  
   try {
     const address = req.query.address;
 

@@ -41,6 +41,23 @@ app.prepare().then(() => {
     res.status(200).json({ status: 'healthy', timestamp: new Date().toISOString() });
   });
 
+  // CORS headers only for specific APIs that need external access
+  server.use('/api/signAsFeePayer', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Content-Type', 'application/json');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  });
+
+  server.use('/api/balance', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Content-Type', 'application/json');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  });
+
   // API Routes (excluding auth which is handled by NextAuth in Next.js)
   server.use('/api/dapps', dappsRoutes);
   server.use('/api/contracts', contractsRoutes);
