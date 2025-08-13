@@ -63,7 +63,7 @@ export default function UsersPage() {
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="bg-white rounded-xl shadow-lg p-6">
           <div className="flex items-center justify-between mb-6">
-            <h1 className="text-2xl font-bold">Users</h1>
+            <h1 className="text-2xl text-gray-900 font-bold">Users</h1>
             <button onClick={() => { setEditing(null); setOpen(true); }} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Create User</button>
           </div>
           {error && <div className="text-sm text-red-600 mb-4">{error}</div>}
@@ -79,15 +79,15 @@ export default function UsersPage() {
               <tbody className="bg-white divide-y divide-gray-200">
                 {users.map((u) => (
                   <tr key={u.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{u.email}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700">{u.firstName} {u.lastName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 capitalize">{u.role}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.email}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{u.firstName} {u.lastName}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 capitalize">{u.role}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
                       {u.isActive ? <span className="text-green-600">Active</span> : <span className="text-gray-500">Inactive</span>}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{new Date(u.createdAt).toLocaleString()}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm flex space-x-2">
-                      <button onClick={() => { setEditing(u); setOpen(true); }} className="px-3 py-1 bg-gray-100 rounded hover:bg-gray-200">Edit</button>
+                      <button onClick={() => { setEditing(u); setOpen(true); }} className="px-3 py-1 bg-blue-500 rounded hover:bg-blue-400">Edit</button>
                       {u.isActive && (
                         <button onClick={() => onDeactivate(u.id)} className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700">Deactivate</button>
                       )}

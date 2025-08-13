@@ -84,7 +84,8 @@ function buildAccountCreatedHtml(loginUrl) {
         </div>
         <div class="content">
           <p>Hello,</p>
-          <p>Your account has been created by an administrator. You can sign in or set your password using the link below:</p>
+          <p>Your account has been created by an administrator.</p>
+          <p>For your first login, please click the button/link below to the login page and <strong>set up your password by selecting "Forgot password?"</strong>.</p>
           <p style="margin: 24px 0;">
             <a class="btn" href="${loginUrl}" target="_blank" rel="noopener noreferrer">Open Login</a>
           </p>

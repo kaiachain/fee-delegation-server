@@ -47,53 +47,70 @@ export const authOptions = {
     }),
   ],
   callbacks: {
-    async jwt({ token, account }: { token: JWT; account: { id?: string; access_token?: string; id_token?: string; expires_at?: number } | null }) {
+    async signIn({ user, account }: { user: any; account: any }) {
+      // Additional restriction for Google sign-in to whitelist only
+      if (account?.provider === "google") {
+        const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
+        const email = (user?.email as string) || "";
+        if (!admins.includes(email)) {
+          // Redirect back to custom login with error
+          return "/auth/login?error=AccessDenied";
+        }
+        return true;
+      }
+      // Allow credentials (email/password) sign-in
+      return true;
+    },
+    async jwt({ token, account, user }: { token: JWT; account: { id?: string; access_token?: string; id_token?: string; expires_at?: number, provider?: string; emailJwt?: string; emailTokenExpiresAt?: number; user?: any } | null, user?: any }) {
       if (account) {
         token.userId = account.id as string;
         token.accessToken = account.access_token;
-        token.idToken = account.id_token;
-        token.expiresAt = account.expires_at;
+        token.idToken = account.provider === "credentials" ? user.emailJwt : account.id_token;
+        token.expiresAt = account.provider === "credentials" ? user.emailTokenExpiresAt : account.expires_at;
+        token.role = account.provider === "credentials" ? user?.role : undefined;
+        token.provider = account.provider;
 
-        return { ...token, sessionExpired: false };
+        return { ...token,  sessionExpired: false };
+      }
+      // Persist credentials provider data into the token on sign-in
+      if ((user as any)?.provider === "credentials") {
+        const u = user as any;
+        // @ts-ignore
+        (token as any).role = (u.role as string) || "viewer";
+        if (u.emailJwt) {
+          token.idToken = u.emailJwt as string;
+        }
+        if (u.emailTokenExpiresAt) {
+          token.expiresAt = u.emailTokenExpiresAt as number;
+        }
       }
       return token;
     },
-    async session({ session, token, user }: { session: Session; token: JWT; user: any }) {
+    async session({ session, token }: { session: Session; token: JWT }) {
+      // Basic identity fields from token
       session.accessToken = token.accessToken as string;
       session.user.id = token.userId as string;
-      session.user.email = token.email as string;
-      session.user.image = token.picture as string;
-      session.user.name = token.name as string;
-      // Ensure idToken is available for backend API calls
-      session.idToken = token.idToken as string;
-      session.idTokenExpires = token.expiresAt as number;
-      // If credentials provider was used, carry over role and JWT
-      // NextAuth places credentials 'user' only on initial sign in; afterwards, store into token on jwt callback
-      // Here, we trust user object when present to seed the session
-      if ((user as any)?.provider === "credentials") {
-        const u = user as any;
-        session.user.role = (u.role as "editor" | "viewer" | "super_admin") || "viewer";
-        if (u.emailJwt) {
-          session.idToken = u.emailJwt as string;
-          if (u.emailTokenExpiresAt) session.idTokenExpires = u.emailTokenExpiresAt as number;
-        }
+      session.user.email = (session.user.email as string) || (token as any).email;
+      session.user.image = (token as any).picture as string;
+      session.user.name = (token as any).name as string;
+
+      // Make idToken and its expiry (epoch seconds) available for backend API calls
+      session.idToken = (token as any).idToken as string;
+      session.idTokenExpires = (token as any).expiresAt as number;
+
+      // Role resolution
+      const tokenRole = (token as any).role as string | undefined;
+      if (tokenRole) {
+        session.user.role = tokenRole as "editor" | "viewer" | "super_admin";
       } else {
         // Fallback: Google whitelist -> super_admin, else viewer
         const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
-        if (admins.includes(session.user.email)) {
-          session.user.role = "super_admin";
-        } else {
-          session.user.role = "viewer";
-        }
-      }
-      if (Date.now() < ((session.idTokenExpires as number) * 1000 || 0)) {
-        return {
-          ...session,
-          sessionExpired: false,
-        };
+        session.user.role = admins.includes(session.user.email || "") ? "super_admin" : "viewer";
       }
 
-      session.sessionExpired = true;
+      // Compute sessionExpired using idTokenExpires
+      const expiresMs = typeof session.idTokenExpires === "number" ? session.idTokenExpires * 1000 : 0;
+      session.sessionExpired = expiresMs ? Date.now() >= expiresMs : false;
       return session;
     },
   },

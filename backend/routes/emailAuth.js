@@ -91,7 +91,7 @@ router.post('/set-password', rateLimit({ name: 'setpw', max: 5, windowMs: 60_000
 
     const record = await prisma.passwordResetToken.findUnique({ where: { token } });
     if (!record || record.used || record.expiresAt <= new Date()) {
-      return createResponse(res, 'BAD_REQUEST', 'Invalid or expired token');
+      return createResponse(res, 'BAD_REQUEST', 'Invalid or expired token plese trigger reset password again');
     }
 
     const hash = await hashPassword(password);

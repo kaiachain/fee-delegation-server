@@ -36,12 +36,18 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
       return createResponse(res, 'CONFLICT', 'User already exists');
     }
 
+    // Normalize and validate role against Prisma enum (EDITOR | VIEWER)
+    const normalizedRole = (role || 'VIEWER').toString().toUpperCase();
+    if (!['EDITOR', 'VIEWER'].includes(normalizedRole)) {
+      return createResponse(res, 'BAD_REQUEST', 'Invalid role. Allowed: editor, viewer');
+    }
+
     const created = await prisma.user.create({
       data: {
         email: email.toLowerCase(),
         firstName,
         lastName,
-        role: role || 'VIEWER',
+        role: normalizedRole,
         createdBy: req.user?.email || 'super-admin',
       }
     });
@@ -68,7 +74,13 @@ router.put('/:id', requireEditorOrSuperAdmin, async (req, res) => {
     const data = {};
     if (firstName !== undefined) data.firstName = firstName;
     if (lastName !== undefined) data.lastName = lastName;
-    if (role !== undefined) data.role = role;
+    if (role !== undefined) {
+      const normalizedRole = role.toString().toUpperCase();
+      if (!['EDITOR', 'VIEWER'].includes(normalizedRole)) {
+        return createResponse(res, 'BAD_REQUEST', 'Invalid role. Allowed: editor, viewer');
+      }
+      data.role = normalizedRole;
+    }
     if (isActive !== undefined) data.isActive = isActive;
     const updated = await prisma.user.update({ where: { id }, data });
     return createResponse(res, 'SUCCESS', { id: updated.id });

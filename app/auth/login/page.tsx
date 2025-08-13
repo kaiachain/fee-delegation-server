@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import { signIn } from "next-auth/react";
+import { useRouter } from "next/navigation";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [activeTab, setActiveTab] = useState<"google" | "email">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -15,6 +17,7 @@ export default function LoginPage() {
     setError(null);
     try {
       await signIn("google");
+      router.replace("/management");
     } catch (e: any) {
       setError(e?.message || "Sign in failed");
       setLoading(false);
@@ -37,7 +40,7 @@ export default function LoginPage() {
         return;
       }
       // On success, NextAuth will set the session; redirect to management
-      window.location.href = "/management";
+      router.replace("/rank");
     } catch (e: any) {
       setError(e?.message || "Sign in failed");
       setLoading(false);
@@ -79,7 +82,7 @@ export default function LoginPage() {
                     type="email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="mt-1 block w-full text-gray-600 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="you@example.com"
                     required
                   />
@@ -90,7 +93,7 @@ export default function LoginPage() {
                     type="password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="mt-1 block w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="mt-1 block w-full text-gray-600 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                     placeholder="••••••••"
                     required
                   />
@@ -112,7 +115,7 @@ export default function LoginPage() {
             ) : (
               <div className="space-y-4">
                 <p className="text-sm text-gray-600">
-                  Google sign-in is for Kaia internal use (<span className="font-semibold">Super Admin only</span>).
+                  Google sign-in is for Kaia internal use.
                 </p>
                 {error && (
                   <div className="text-sm text-red-600">{error}</div>
@@ -120,7 +123,7 @@ export default function LoginPage() {
                 <button
                   onClick={handleGoogle}
                   disabled={loading}
-                  className="w-full flex justify-center items-center px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-black transition-colors"
+                  className="w-full flex justify-center items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-500 transition-colors"
                 >
                   {loading ? "Redirecting..." : "Continue with Google"}
                 </button>
