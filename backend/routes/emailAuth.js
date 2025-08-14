@@ -29,6 +29,12 @@ router.post('/login', rateLimit({ name: 'login', max: 10, windowMs: 60_000 }), v
       return createResponse(res, 'BAD_REQUEST', 'Invalid credentials');
     }
 
+    // Update lastLoginAt
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { lastLoginAt: new Date() }
+    });
+
     // Normalize role to lowercase strings used by FE/middleware
     const normalizedRole = (user.role || 'EDITOR').toString().toLowerCase();
     const token = signEmailJwt({
@@ -134,6 +140,7 @@ router.post('/change-password', rateLimit({ name: 'changepw', max: 10, windowMs:
     return createResponse(res, 'UNAUTHORIZED', 'Unauthorized');
   }
 });
+
 
 function cryptoRandomToken() {
   const { randomBytes } = require('crypto');

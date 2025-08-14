@@ -53,8 +53,8 @@ export const authOptions = {
         const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
         const email = (user?.email as string) || "";
         if (!admins.includes(email)) {
-          // Redirect back to custom login with error
-          return "/auth/login?error=AccessDenied";
+          // Block unauthorized Google sign-ins
+          throw new Error("Access denied: Email not in whitelist");
         }
         return true;
       }
@@ -120,7 +120,12 @@ export const authOptions = {
   session: {
     strategy: "jwt" as const,
   },
-  // Add error handling
+  // Custom pages
+  pages: {
+    signIn: '/auth/login',
+    error: '/auth/login', // Redirect errors to login page
+  },
+  // Add event handling
   events: {
     async signOut() {
       // Clean up any necessary resources

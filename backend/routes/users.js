@@ -59,7 +59,16 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
       console.warn('Account created email not sent:', e?.message || e);
     }
 
-    return createResponse(res, 'SUCCESS', { id: created.id, email: created.email });
+    return createResponse(res, 'SUCCESS', {
+      id: created.id,
+      email: created.email,
+      firstName: created.firstName,
+      lastName: created.lastName,
+      role: created.role,
+      isActive: created.isActive,
+      createdAt: created.createdAt,
+      createdBy: created.createdBy
+    });
   } catch (error) {
     console.error('Create user error:', error);
     return createResponse(res, 'INTERNAL_ERROR', 'Failed to create user');

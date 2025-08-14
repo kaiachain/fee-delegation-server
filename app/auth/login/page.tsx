@@ -16,8 +16,11 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      await signIn("google");
-      router.replace("/management");
+      // For OAuth providers, signIn automatically redirects to the provider
+      // and NextAuth will handle the callback redirect
+      await signIn("google", { 
+        callbackUrl: "/management" // Redirect here after successful OAuth
+      });
     } catch (e: any) {
       setError(e?.message || "Sign in failed");
       setLoading(false);
