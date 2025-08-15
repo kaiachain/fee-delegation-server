@@ -70,7 +70,7 @@ export default function LoginPage() {
                   activeTab === "email" ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                Email / Password
+                Email
               </button>
               <button
                 onClick={() => setActiveTab("google")}
@@ -78,7 +78,7 @@ export default function LoginPage() {
                   activeTab === "google" ? "bg-blue-100 text-blue-700" : "text-gray-600 hover:bg-gray-100"
                 }`}
               >
-                Google (Kaia internal)
+                Google (Kaia Internal Only)
               </button>
             </div>
 

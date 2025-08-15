@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
 const { Wallet, parseTransaction } = require('@kaiachain/ethers-ext/v6');
+const { formatEther } = require('ethers');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
 const {
@@ -337,8 +338,8 @@ async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold })
       auth: { user, pass },
     });
 
-    const newBalanceFormatted = (BigInt(newBalance) / BigInt(10 ** 18)).toString();
-    const thresholdFormatted = (BigInt(threshold) / BigInt(10 ** 18)).toString();
+    const newBalanceFormatted = parseFloat(formatEther(newBalance)).toFixed(4);
+    const thresholdFormatted = parseFloat(formatEther(threshold)).toFixed(4);
 
     const subject = `Fee Delegation Alert - ${dappName} balance below threshold`;
     const text = `DApp: ${dappName}\nNew Balance (KAIA): ${newBalanceFormatted}\nThreshold (KAIA): ${thresholdFormatted}`;

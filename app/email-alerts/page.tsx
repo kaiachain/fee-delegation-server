@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { fetchData } from "@/lib/apiUtils";
+import { formatEther } from "ethers";
 
 interface EmailAlertLog {
   id: string;
@@ -104,7 +105,7 @@ export default function EmailAlertsPage() {
   };
 
   const formatBalance = (balance: string) => {
-    return (BigInt(balance) / BigInt(10 ** 18)).toString();
+    return parseFloat(formatEther(balance)).toFixed(4);
   };
 
   const formatDate = (dateString: string) => {

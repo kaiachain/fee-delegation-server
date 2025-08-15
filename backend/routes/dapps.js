@@ -323,6 +323,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
           const existingContracts = await tx.contract.findMany({ where: { dappId: id } });
           const existingSenders = await tx.sender.findMany({ where: { dappId: id } });
           const existingApiKeys = await tx.apiKey.findMany({ where: { dappId: id } });
+          const existingEmailAlerts = await tx.emailAlert.findMany({ where: { dappId: id } });
           const existingUserAccess = await tx.userDappAccess.findMany({ 
             where: { dappId: id },
             include: { user: { select: { email: true } } }
@@ -330,25 +331,26 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 
           // Smart contract updates
           if (contracts !== undefined) {
-            console.log(`Smart updating contracts for DApp ${id}: ${existingContracts.length} existing, ${contracts.length} new`);
             await updateContracts(tx, id, existingContracts, contracts);
           }
 
           // Smart sender updates
           if (senders !== undefined) {
-            console.log(`Smart updating senders for DApp ${id}: ${existingSenders.length} existing, ${senders.length} new`);
             await updateSenders(tx, id, existingSenders, senders);
           }
 
           // Smart API key updates
           if (apiKeys !== undefined) {
-            console.log(`Smart updating API keys for DApp ${id}: ${existingApiKeys.length} existing, ${apiKeys.length} new`);
             await updateApiKeys(tx, id, existingApiKeys, apiKeys);
+          }
+
+          // Smart email alerts updates
+          if (emailAlerts !== undefined) {
+            await updateEmailAlerts(tx, id, existingEmailAlerts, emailAlerts);
           }
 
           // Smart user access updates
           if (userAccessEmails !== undefined) {
-            console.log(`Smart updating user access for DApp ${id}: ${existingUserAccess.length} existing, ${userAccessEmails.length} new`);
             await updateUserAccess(tx, id, existingUserAccess, userAccessEmails);
           }
 
@@ -660,7 +662,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
   // Delete contracts that are no longer in the new list
   const toDelete = existingContracts.filter(c => !newMap.has(c.address.toLowerCase()));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} contracts for DApp ${dappId}: ${toDelete.map(c => c.address).join(', ')}`);
     await tx.contract.deleteMany({
       where: { id: { in: toDelete.map(c => c.id) } }
     });
@@ -682,7 +683,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
         existingContract.active !== (newContract.active !== false);
       
       if (needsUpdate) {
-        console.log(`Updating contract ${address} for DApp ${dappId}`);
         await tx.contract.update({
           where: { id: existingContract.id },
           data: {
@@ -695,7 +695,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
       }
     } else {
       // Create new contract
-      console.log(`Creating new contract ${address} for DApp ${dappId}`);
       await tx.contract.create({
         data: {
           dappId,
@@ -708,8 +707,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
       createdCount++;
     }
   }
-  
-  console.log(`Contracts update summary for DApp ${dappId}: ${toDelete.length} deleted, ${updatedCount} updated, ${createdCount} created`);
 };
 
 const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
@@ -719,7 +716,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
   // Delete senders that are no longer in the new list
   const toDelete = existingSenders.filter(s => !newMap.has(s.address.toLowerCase()));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} senders for DApp ${dappId}: ${toDelete.map(s => s.address).join(', ')}`);
     await tx.sender.deleteMany({
       where: { id: { in: toDelete.map(s => s.id) } }
     });
@@ -731,7 +727,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
   for (const newSender of newSenders) {
     const address = newSender.address.toLowerCase();
     if (!existingMap.has(address)) {
-      console.log(`Creating new sender ${address} for DApp ${dappId}`);
       await tx.sender.create({
         data: {
           dappId,
@@ -742,8 +737,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
       createdCount++;
     }
   }
-  
-  console.log(`Senders update summary for DApp ${dappId}: ${toDelete.length} deleted, ${createdCount} created`);
 };
 
 const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
@@ -753,7 +746,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
   // Delete API keys that are no longer in the new list
   const toDelete = existingApiKeys.filter(k => !newMap.has(k.key));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} API keys for DApp ${dappId}: ${toDelete.map(k => k.name).join(', ')}`);
     await tx.apiKey.deleteMany({
       where: { id: { in: toDelete.map(k => k.id) } }
     });
@@ -773,7 +765,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
         existingApiKey.active !== (newApiKey.active !== false);
       
       if (needsUpdate) {
-        console.log(`Updating API key ${newApiKey.name} for DApp ${dappId}`);
         await tx.apiKey.update({
           where: { id: existingApiKey.id },
           data: { 
@@ -785,7 +776,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
       }
     } else {
       // Create new API key
-      console.log(`Creating new API key ${newApiKey.name} for DApp ${dappId}`);
       await tx.apiKey.create({
         data: {
           dappId,
@@ -797,8 +787,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
       createdCount++;
     }
   }
-  
-  console.log(`API keys update summary for DApp ${dappId}: ${toDelete.length} deleted, ${updatedCount} updated, ${createdCount} created`);
 };
 
 const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) => {
@@ -808,7 +796,6 @@ const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) =>
   // Remove access for users not in target list
   const toRemove = existingUserAccess.filter(access => !targetEmailsSet.has(access.user.email));
   if (toRemove.length > 0) {
-    console.log(`Removing ${toRemove.length} user access entries for DApp ${dappId}: ${toRemove.map(access => access.user.email).join(', ')}`);
     await tx.userDappAccess.deleteMany({
       where: { id: { in: toRemove.map(access => access.id) } }
     });
@@ -826,7 +813,6 @@ const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) =>
       });
       
       if (user) {
-        console.log(`Adding user access for ${email} to DApp ${dappId}`);
         await tx.userDappAccess.create({
           data: {
             userId: user.id,
@@ -837,8 +823,66 @@ const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) =>
       }
     }
   }
+};
+
+const updateEmailAlerts = async (tx, dappId, existingEmailAlerts, newEmailAlerts) => {
+  const existingMap = new Map(existingEmailAlerts.map(e => [e.email, e]));
+  const newMap = new Map(newEmailAlerts.map(e => [e.email, e]));
   
-  console.log(`User access update summary for DApp ${dappId}: ${toRemove.length} removed, ${createdCount} added`);
+  // Delete email alerts that are no longer in the new list
+  const toDelete = existingEmailAlerts.filter(e => !newMap.has(e.email));
+  if (toDelete.length > 0) {
+    await tx.emailAlert.deleteMany({
+      where: { id: { in: toDelete.map(e => e.id) } }
+    });
+  }
+  
+  let updatedCount = 0;
+  let createdCount = 0;
+  
+  // Update existing email alerts or create new ones
+  for (const newAlert of newEmailAlerts) {
+    const existingAlert = existingMap.get(newAlert.email);
+    
+    if (existingAlert) {
+      // Convert threshold to wei for comparison
+      const newThresholdWei = ethers.parseUnits(Number(newAlert.balanceThreshold).toString(), 18).toString();
+      
+      // Update existing email alert if data changed
+      const needsUpdate = 
+        existingAlert.balanceThreshold !== newThresholdWei ||
+        existingAlert.isActive !== (newAlert.isActive !== false);
+      
+      if (needsUpdate) {
+        await tx.emailAlert.update({
+          where: { id: existingAlert.id },
+          data: {
+            balanceThreshold: newThresholdWei,
+            isActive: newAlert.isActive !== false,
+          }
+        });
+        updatedCount++;
+      }
+    } else {
+      // Create new email alert
+      // Convert balance threshold to wei
+      const thresholdNum = Number(newAlert.balanceThreshold);
+      if (isNaN(thresholdNum) || thresholdNum < 0) {
+        throw new Error(`Invalid balance threshold: ${newAlert.balanceThreshold}`);
+      }
+      const thresholdWei = ethers.parseUnits(thresholdNum.toString(), 18);
+      
+      await tx.emailAlert.create({
+        data: {
+          dappId,
+          email: newAlert.email,
+          balanceThreshold: thresholdWei.toString(),
+          isActive: newAlert.isActive !== false,
+        }
+      });
+      createdCount++;
+    }
+  }
 };
 
 module.exports = router; 
