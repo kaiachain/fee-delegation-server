@@ -459,6 +459,119 @@ const getDappByApiKey = async (apiKey) => {
   return dapp;
 };
 
+/**
+ * Get accessible DApp IDs for a user based on their role and email
+ * @param {string} userRole - User's role ('super_admin', 'editor', etc.)
+ * @param {string} userEmail - User's email address
+ * @returns {Promise<string[]|null>} Array of DApp IDs user has access to, or null if super_admin (all access)
+ */
+const getUserAccessibleDappIds = async (userRole, userEmail) => {
+  // Super admins have access to all DApps
+  if (userRole === 'super_admin') {
+    return null; // Null indicates all access
+  }
+  
+  // Get DApp IDs that the user has access to
+  const userAccessDapps = await prisma.userDappAccess.findMany({
+    where: {
+      user: {
+        email: userEmail,
+        isActive: true
+      }
+    },
+    select: {
+      dappId: true
+    }
+  });
+  
+  return userAccessDapps.map(access => access.dappId);
+};
+
+/**
+ * Apply DApp access filtering to a Prisma where clause
+ * @param {Object} whereClause - Existing Prisma where clause (will be modified)
+ * @param {string} userRole - User's role ('super_admin', 'editor', etc.)
+ * @param {string} userEmail - User's email address
+ * @param {string} dappIdField - Field name for DApp ID (default: 'dappId')
+ * @returns {Promise<Object>} The modified where clause (same object reference)
+ */
+const applyDappAccessFilter = async (whereClause, userRole, userEmail, dappIdField = 'dappId') => {
+  const accessibleDappIds = await getUserAccessibleDappIds(userRole, userEmail);
+  
+  // Super admins see all - no filtering needed
+  if (accessibleDappIds === null) {
+    return whereClause;
+  }
+  
+  // Apply DApp access filtering by modifying the whereClause object
+  if (accessibleDappIds.length > 0) {
+    whereClause[dappIdField] = {
+      in: accessibleDappIds
+    };
+  } else {
+    // User has no DApp access - return impossible condition
+    whereClause[dappIdField] = {
+      in: [] // Empty array means no results
+    };
+  }
+  
+  return whereClause;
+};
+
+/**
+ * Check if user has access to a specific DApp
+ * @param {string} dappId - DApp ID to check access for
+ * @param {string} userRole - User's role ('super_admin', 'editor', etc.)
+ * @param {string} userEmail - User's email address
+ * @returns {Promise<boolean>} True if user has access, false otherwise
+ */
+const hasUserDappAccess = async (dappId, userRole, userEmail) => {
+  // Super admins have access to all DApps
+  if (userRole === 'super_admin') {
+    return true;
+  }
+  
+  // Check if user has access to this specific DApp
+  const userAccess = await prisma.userDappAccess.findFirst({
+    where: {
+      dappId,
+      user: {
+        email: userEmail,
+        isActive: true
+      }
+    }
+  });
+  
+  return !!userAccess;
+};
+
+/**
+ * Validate user access to a specific email alert by ID
+ * @param {string} emailAlertId - Email alert ID to check access for
+ * @param {string} userRole - User's role ('super_admin', 'editor', etc.)
+ * @param {string} userEmail - User's email address
+ * @returns {Promise<{success: boolean, dappId?: string, error?: string}>} Validation result with DApp ID if successful
+ */
+const validateEmailAlertAccess = async (emailAlertId, userRole, userEmail) => {
+  // Find the email alert and get its DApp ID
+  const emailAlert = await prisma.emailAlert.findUnique({
+    where: { id: emailAlertId },
+    select: { dappId: true }
+  });
+  
+  if (!emailAlert) {
+    return { success: false, error: "Email alert not found" };
+  }
+  
+  // Check if user has access to this DApp
+  const hasAccess = await hasUserDappAccess(emailAlert.dappId, userRole, userEmail);
+  if (!hasAccess) {
+    return { success: false, error: "You don't have access to this email alert" };
+  }
+  
+  return { success: true, dappId: emailAlert.dappId };
+};
+
 module.exports = {
   createResponse,
   checkWhitelistedContractsWithoutAPIkey,
@@ -475,4 +588,8 @@ module.exports = {
   checkContractExistsForApiKeyDapps,
   checkSenderExistsForApiKeyDapps,
   getDappByApiKey,
+  getUserAccessibleDappIds,
+  applyDappAccessFilter,
+  hasUserDappAccess,
+  validateEmailAlertAccess,
 }; 

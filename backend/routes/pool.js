@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { createResponse } = require('../utils/apiUtils');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // GET /api/pool
-router.get('/', requireEditor, async (req, res) => {
+router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const balance = await pickProviderFromPool().getBalance(process.env.ACCOUNT_ADDRESS || "", "latest");
     return createResponse(res, "SUCCESS", balance.toString());
