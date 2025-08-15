@@ -105,7 +105,7 @@ export default function EmailAlertsPage() {
   };
 
   const formatBalance = (balance: string) => {
-    return parseFloat(formatEther(balance)).toFixed(4);
+    return formatEther(balance);
   };
 
   const formatDate = (dateString: string) => {

@@ -1,15 +1,17 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
-const { createResponse } = require('../utils/apiUtils');
+const { createResponse, applyDappAccessFilter, hasUserDappAccess } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // GET /api/email-alert-logs
 router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { dappId, email, isRead } = req.query;
+    const userRole = req.user?.role;
+    const userEmail = req.user?.email;
 
-    const whereClause = {};
+    let whereClause = {};
     
     if (dappId) {
       whereClause.dappId = dappId;
@@ -22,6 +24,9 @@ router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
     if (isRead !== null && isRead !== undefined) {
       whereClause.isRead = isRead === "true";
     }
+
+    // Apply DApp access filtering
+    whereClause = await applyDappAccessFilter(whereClause, userRole, userEmail);
 
     const emailAlertLogs = await prisma.emailAlertLog.findMany({
       where: whereClause,
@@ -41,6 +46,8 @@ router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
 router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { id, dappId, markAllAsRead } = req.body;
+    const userRole = req.user?.role;
+    const userEmail = req.user?.email;
 
     // Validate request
     if (!id && !dappId && !markAllAsRead) {
@@ -50,11 +57,12 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
     let result;
 
     if (markAllAsRead) {
-      // Mark all unread logs as read
+      // Mark all unread logs as read (filtered by user access)
+      let markAllWhereClause = { isRead: false };
+      markAllWhereClause = await applyDappAccessFilter(markAllWhereClause, userRole, userEmail);
+      
       result = await prisma.emailAlertLog.updateMany({
-        where: {
-          isRead: false
-        },
+        where: markAllWhereClause,
         data: {
           isRead: true
         }
@@ -68,9 +76,12 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
     }
 
     if (id) {
-      // Mark specific log as read by ID
+      // Mark specific log as read by ID (with access check)
+      let logWhereClause = { id };
+      logWhereClause = await applyDappAccessFilter(logWhereClause, userRole, userEmail);
+      
       result = await prisma.emailAlertLog.update({
-        where: { id },
+        where: logWhereClause,
         data: { isRead: true }
       });
       
@@ -82,12 +93,20 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
     }
 
     if (dappId) {
+      // Check if user has access to this DApp
+      const hasAccess = await hasUserDappAccess(dappId, userRole, userEmail);
+      if (!hasAccess) {
+        return createResponse(res, "UNAUTHORIZED", "You don't have access to this DApp's email alert logs");
+      }
+      
       // Mark all logs for a specific DApp as read
+      const dappWhereClause = {
+        dappId,
+        isRead: false
+      };
+      
       result = await prisma.emailAlertLog.updateMany({
-        where: {
-          dappId,
-          isRead: false
-        },
+        where: dappWhereClause,
         data: {
           isRead: true
         }
