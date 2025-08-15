@@ -98,6 +98,9 @@ export const authOptions = {
       session.idToken = (token as any).idToken as string;
       session.idTokenExpires = (token as any).expiresAt as number;
 
+      // Provider information
+      session.user.provider = (token as any).provider as string;
+
       // Role resolution
       const tokenRole = (token as any).role as string | undefined;
       if (tokenRole) {
@@ -119,6 +122,7 @@ export const authOptions = {
   // Add these options to improve compatibility
   session: {
     strategy: "jwt" as const,
+    maxAge: 24 * 60 * 60, // 24 hours in seconds
   },
   // Custom pages
   pages: {

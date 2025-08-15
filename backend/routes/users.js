@@ -3,7 +3,7 @@ const router = express.Router();
 const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
-const { sendAccountCreatedEmail } = require('../utils/emailService');
+const { sendAccountCreatedEmail, sendAccountCreatedWithPasswordSetupEmail } = require('../utils/emailService');
 
 function isValidEmail(email) {
   return typeof email === 'string' && /.+@.+\..+/.test(email);
@@ -53,8 +53,18 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
     });
 
     try {
+      // Create password reset token with 7-day expiration for new user setup
+      const token = await prisma.passwordResetToken.create({
+        data: {
+          token: cryptoRandomToken(),
+          userId: created.id,
+          expiresAt: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)), // 7 days for user creation
+        }
+      });
+
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
-      await sendAccountCreatedEmail({ to: created.email, loginUrl: `${baseUrl}/auth/login` });
+      const resetUrl = `${baseUrl}/auth/reset-password?token=${encodeURIComponent(token.token)}`;
+      await sendAccountCreatedWithPasswordSetupEmail({ to: created.email, resetUrl });
     } catch (e) {
       console.warn('Account created email not sent:', e?.message || e);
     }
@@ -99,15 +109,31 @@ router.put('/:id', requireEditorOrSuperAdmin, async (req, res) => {
   }
 });
 
-// DELETE /api/users/:id (soft delete)
+// DELETE /api/users/:id (soft delete by default, hard delete with ?hard=true)
 router.delete('/:id', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
-    await prisma.user.update({ where: { id }, data: { isActive: false } });
-    return createResponse(res, 'SUCCESS', { id });
+    const { hard } = req.query;
+    
+    if (hard === 'true') {
+      // Hard delete: physically delete the user (cascades remove DApp access)
+      await prisma.user.delete({ where: { id } });
+      return createResponse(res, 'SUCCESS', { id, deleted: 'hard' });
+    } else {
+      // Soft delete: set isActive=false and remove all DApp access
+      await prisma.$transaction(async (tx) => {
+        // Remove all DApp access for this user
+        await tx.userDappAccess.deleteMany({ where: { userId: id } });
+        
+        // Set user as inactive
+        await tx.user.update({ where: { id }, data: { isActive: false } });
+      });
+      
+      return createResponse(res, 'SUCCESS', { id, deleted: 'soft' });
+    }
   } catch (error) {
-    console.error('Deactivate user error:', error);
-    return createResponse(res, 'INTERNAL_ERROR', 'Failed to deactivate user');
+    console.error('Delete user error:', error);
+    return createResponse(res, 'INTERNAL_ERROR', 'Failed to delete user');
   }
 });
 
@@ -137,6 +163,35 @@ router.post('/:id/reset-password', requireEditorOrSuperAdmin, async (req, res) =
   } catch (error) {
     console.error('Reset user password error:', error);
     return createResponse(res, 'INTERNAL_ERROR', 'Failed to trigger reset');
+  }
+});
+
+// GET /api/users/validate/:email - Validate if user exists and is active
+router.get('/validate/:email', requireEditorOrSuperAdmin, async (req, res) => {
+  try {
+    const { email } = req.params;
+    
+    if (!isValidEmail(email)) {
+      return createResponse(res, 'BAD_REQUEST', 'Invalid email format');
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { email: email.toLowerCase() },
+      select: { id: true, email: true, firstName: true, lastName: true, isActive: true, role: true }
+    });
+
+    if (!user || user.role === "VIEWER") {
+      return createResponse(res, 'NOT_FOUND', 'No user found with this email address. Please make sure the user has been created in the system.');
+    }
+
+    if (!user.isActive) {
+      return createResponse(res, 'BAD_REQUEST', 'This user account is inactive and cannot be assigned to DApps.');
+    }
+
+    return createResponse(res, 'SUCCESS', user);
+  } catch (error) {
+    console.error('Validate user error:', error);
+    return createResponse(res, 'INTERNAL_ERROR', 'Failed to validate user');
   }
 });
 

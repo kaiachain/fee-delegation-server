@@ -20,6 +20,7 @@ model DApp {
   senders         Sender[]
   apiKeys         ApiKey[]
   emailAlerts     EmailAlert[]
+  userAccess      UserDappAccess[]
 }
 
 model ApiKey {
@@ -104,6 +105,7 @@ model User {
   lastLoginAt  DateTime?
 
   resetTokens  PasswordResetToken[]
+  dappAccess   UserDappAccess[]
 
 }
 
@@ -119,4 +121,15 @@ model PasswordResetToken {
 
   @@index([expiresAt])
   @@index([userId, used])
+}
+
+model UserDappAccess {
+  id     String @id @default(cuid())
+  userId String
+  dappId String
+  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dapp   DApp   @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, dappId])
 }
