@@ -3,9 +3,11 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { usePasswordEncoding } from "@/lib/usePasswordEncryption";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { encodePassword } = usePasswordEncoding();
   const [activeTab, setActiveTab] = useState<"google" | "email">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -32,10 +34,13 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
+      // Encode password before sending to NextAuth
+      const encodedPassword = encodePassword(password);
+      
       const res = await signIn("credentials", {
         redirect: false,
         email,
-        password,
+        password: encodedPassword,
       });
       if (res?.error) {
         setError("Invalid email or password");

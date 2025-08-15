@@ -6,13 +6,14 @@ const { hashPassword, comparePassword, signEmailJwt } = require('../utils/passwo
 const { sendPasswordResetEmail } = require('../utils/emailService');
 const { rateLimit } = require('../middleware/rateLimiting');
 const { validateEmail, validatePassword } = require('../middleware/validation');
+const { decodePasswords } = require('../middleware/passwordDecryption');
 
 function isValidEmail(email) {
   return typeof email === 'string' && /.+@.+\..+/.test(email);
 }
 
 // POST /api/email-auth/login
-router.post('/login', rateLimit({ name: 'login', max: 10, windowMs: 60_000 }), validateEmail, validatePassword, async (req, res) => {
+router.post('/login', rateLimit({ name: 'login', max: 10, windowMs: 60_000 }), decodePasswords, validateEmail, validatePassword, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!isValidEmail(email) || !password) {
@@ -88,7 +89,7 @@ router.post('/reset-password', rateLimit({ name: 'reset', max: 5, windowMs: 60_0
 });
 
 // POST /api/email-auth/set-password (complete reset)
-router.post('/set-password', rateLimit({ name: 'setpw', max: 5, windowMs: 60_000 }), validatePassword, async (req, res) => {
+router.post('/set-password', rateLimit({ name: 'setpw', max: 5, windowMs: 60_000 }), decodePasswords, validatePassword, async (req, res) => {
   try {
     const { token, password } = req.body || {};
     if (!token || !password) {
@@ -115,7 +116,7 @@ router.post('/set-password', rateLimit({ name: 'setpw', max: 5, windowMs: 60_000
 });
 
 // POST /api/email-auth/change-password (authenticated via email JWT)
-router.post('/change-password', rateLimit({ name: 'changepw', max: 10, windowMs: 60_000 }), validatePassword, async (req, res) => {
+router.post('/change-password', rateLimit({ name: 'changepw', max: 10, windowMs: 60_000 }), decodePasswords, validatePassword, async (req, res) => {
   try {
     const authHeader = req.headers.authorization || '';
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';

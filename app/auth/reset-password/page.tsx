@@ -2,11 +2,13 @@
 
 import { useEffect, useState, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
+import { usePasswordEncoding } from "@/lib/usePasswordEncryption";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
+  const { encodePassword } = usePasswordEncoding();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -62,10 +64,13 @@ function ResetPasswordForm() {
         setLoading(false);
         return;
       }
+      // Encode password before sending
+      const encodedPassword = encodePassword(password);
+      
       const res = await fetch(`${apiBase}/email-auth/set-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, password }),
+        body: JSON.stringify({ token, password: encodedPassword }),
       });
       const data = await res.json();
       if (!res.ok || !data?.status) {
