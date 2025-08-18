@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
-const { Wallet, parseTransaction, formatEther } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, parseTransaction, formatKaia } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
 const {
@@ -247,9 +247,10 @@ router.post('/', async (req, res) => {
 async function settlement(dapp, receipt) {
   if (process.env.NETWORK === 'mainnet') {
     if (dapp) {
-      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
+      const gasPriceValue = receipt?.gasPrice ?? receipt?.effectiveGasPrice;
+      if (receipt?.gasUsed !== undefined && gasPriceValue !== undefined) {
         const gasUsed = typeof receipt.gasUsed === 'bigint' ? receipt.gasUsed : BigInt(receipt.gasUsed);
-        const gasPrice = typeof receipt.gasPrice === 'bigint' ? receipt.gasPrice : BigInt(receipt.gasPrice);
+        const gasPrice = typeof gasPriceValue === 'bigint' ? gasPriceValue : BigInt(gasPriceValue);
         const usedFee = gasUsed * gasPrice;
         await updateDappWithFee(dapp, usedFee);
 
@@ -337,8 +338,8 @@ async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold })
       auth: { user, pass },
     });
 
-    const newBalanceFormatted = formatEther(newBalance);
-    const thresholdFormatted = formatEther(threshold);
+    const newBalanceFormatted = parseFloat(formatKaia(newBalance)).toFixed(4);
+    const thresholdFormatted = parseFloat(formatKaia(threshold)).toFixed(4);
 
     const subject = `Fee Delegation Alert - ${dappName} balance below threshold`;
     const text = `DApp: ${dappName}\nNew Balance (KAIA): ${newBalanceFormatted}\nThreshold (KAIA): ${thresholdFormatted}`;
