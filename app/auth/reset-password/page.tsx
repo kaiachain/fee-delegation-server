@@ -1,14 +1,17 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, Suspense, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { usePasswordEncoding } from "@/lib/usePasswordEncryption";
+import ReCAPTCHA from "react-google-recaptcha";
+import { getRecaptchaSiteKey } from "@/lib/recaptcha";
 
 function ResetPasswordForm() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const token = searchParams.get("token");
   const { encodePassword } = usePasswordEncoding();
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,6 +19,7 @@ function ResetPasswordForm() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const siteKey = getRecaptchaSiteKey();
 
   useEffect(() => {
     setMessage(null);
@@ -30,6 +34,30 @@ function ResetPasswordForm() {
     setError(null);
     setMessage(null);
     try {
+      // Verify reCAPTCHA if site key is configured
+      if (siteKey && recaptchaRef.current) {
+        const recaptchaToken = recaptchaRef.current.getValue();
+        if (!recaptchaToken) {
+          setError("Please complete the reCAPTCHA");
+          setLoading(false);
+          return;
+        }
+        
+        // Verify reCAPTCHA on server
+        const recaptchaRes = await fetch('/api/verify-recaptcha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken }),
+        });
+        
+        if (!recaptchaRes.ok) {
+          setError("reCAPTCHA verification failed");
+          setLoading(false);
+          recaptchaRef.current.reset();
+          return;
+        }
+      }
+      
       const res = await fetch(`${apiBase}/email-auth/reset-password`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -38,11 +66,17 @@ function ResetPasswordForm() {
       const data = await res.json();
       if (!res.ok || !data?.status) {
         setError(data?.data || data?.message || "Failed to request reset");
+        if (siteKey && recaptchaRef.current) {
+          recaptchaRef.current.reset();
+        }
       } else {
         setMessage("If the email exists, a reset link has been sent.");
       }
     } catch (e: any) {
       setError(e?.message || "Unexpected error");
+      if (siteKey && recaptchaRef.current) {
+        recaptchaRef.current.reset();
+      }
     } finally {
       setLoading(false);
     }
@@ -108,6 +142,15 @@ function ResetPasswordForm() {
                     required
                   />
                 </div>
+                {siteKey && (
+                  <div className="flex justify-center">
+                    <ReCAPTCHA
+                      ref={recaptchaRef}
+                      sitekey={siteKey}
+                      theme="light"
+                    />
+                  </div>
+                )}
                 {error && <div className="text-sm text-red-600">{error}</div>}
                 {message && <div className="text-sm text-green-600">{message}</div>}
                 <button

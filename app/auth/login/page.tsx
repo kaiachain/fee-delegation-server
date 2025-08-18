@@ -1,18 +1,22 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { usePasswordEncoding } from "@/lib/usePasswordEncryption";
+import ReCAPTCHA from "react-google-recaptcha";
+import { getRecaptchaSiteKey } from "@/lib/recaptcha";
 
 export default function LoginPage() {
   const router = useRouter();
   const { encodePassword } = usePasswordEncoding();
+  const recaptchaRef = useRef<ReCAPTCHA>(null);
   const [activeTab, setActiveTab] = useState<"google" | "email">("email");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const siteKey = getRecaptchaSiteKey();
 
   const handleGoogle = async () => {
     setLoading(true);
@@ -34,6 +38,30 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
+      // Verify reCAPTCHA if site key is configured
+      if (siteKey && recaptchaRef.current) {
+        const recaptchaToken = recaptchaRef.current.getValue();
+        if (!recaptchaToken) {
+          setError("Please complete the reCAPTCHA");
+          setLoading(false);
+          return;
+        }
+        
+        // Verify reCAPTCHA on server
+        const recaptchaRes = await fetch('/api/verify-recaptcha', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: recaptchaToken }),
+        });
+        
+        if (!recaptchaRes.ok) {
+          setError("reCAPTCHA verification failed");
+          setLoading(false);
+          recaptchaRef.current.reset();
+          return;
+        }
+      }
+      
       // Encode password before sending to NextAuth
       const encodedPassword = encodePassword(password);
       
@@ -45,6 +73,9 @@ export default function LoginPage() {
       if (res?.error) {
         setError("Invalid email or password");
         setLoading(false);
+        if (siteKey && recaptchaRef.current) {
+          recaptchaRef.current.reset();
+        }
         return;
       }
       // On success, NextAuth will set the session; redirect to management
@@ -52,6 +83,9 @@ export default function LoginPage() {
     } catch (e: any) {
       setError(e?.message || "Sign in failed");
       setLoading(false);
+      if (siteKey && recaptchaRef.current) {
+        recaptchaRef.current.reset();
+      }
     }
   };
 
@@ -106,6 +140,15 @@ export default function LoginPage() {
                     required
                   />
                 </div>
+                {siteKey && (
+                  <div className="flex justify-center">
+                    <ReCAPTCHA
+                      ref={recaptchaRef}
+                      sitekey={siteKey}
+                      theme="light"
+                    />
+                  </div>
+                )}
                 {error && (
                   <div className="text-sm text-red-600">{error}</div>
                 )}

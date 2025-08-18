@@ -6,7 +6,6 @@ if(!dev) {
 
 const express = require('express');
 const next = require('next');
-const path = require('path');
 
 const app = next({ dev });
 const handle = app.getRequestHandler();
@@ -27,8 +26,12 @@ const signAsFeePayerRoutes = require('./backend/routes/signAsFeePayer');
 app.prepare().then(() => {
   const server = express();
 
-  // Handle NextAuth routes first, before any middleware
+  // Handle NextAuth and reCAPTCHA routes with Next.js, before any middleware
   server.all('/api/auth/*', (req, res) => {
+    return handle(req, res);
+  });
+  
+  server.all('/api/verify-recaptcha', (req, res) => {
     return handle(req, res);
   });
 
