@@ -32,6 +32,13 @@ router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
 // POST /api/senders
 router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+
+    // Only super admin can modify senders
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify sender addresses");
+    }
+
     const { dappId, address } = req.body;
 
     if (!dappId || !address) {
@@ -77,6 +84,13 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 // DELETE /api/senders
 router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+
+    // Only super admin can modify senders
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify sender addresses");
+    }
+
     const { id } = req.body;
 
     if (!id) {

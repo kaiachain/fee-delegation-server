@@ -223,6 +223,11 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
       return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify balance or service end date");
     }
     
+    // Editor role cannot modify contracts or senders
+    if (!isSuperAdmin && (contracts !== undefined || senders !== undefined)) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts or sender addresses");
+    }
+    
     // Only SUPER_ADMIN can activate/deactivate DApps
     if (active !== undefined && !isSuperAdmin) {
       return createResponse(res, "UNAUTHORIZED", "Only Super Admin can activate or deactivate DApps");

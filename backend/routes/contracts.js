@@ -34,6 +34,12 @@ router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
 // POST /api/contracts
 router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+    // Only super admin can modify contracts
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts");
+    }
+
     const { dappId, address, hasSwap, swapAddress } = req.body;
 
     if (!dappId || !address) {
@@ -86,6 +92,12 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 // DELETE /api/contracts
 router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+    // Only super admin can modify contracts
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts");
+    }
+
     const { id } = req.body;
 
     if (!id) {

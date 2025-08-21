@@ -394,8 +394,8 @@ export default function EditDappModal({
           balance,
           ...(terminationDate && { terminationDate: convertKSTtoUTC(terminationDate) }),
         } : {}),
-        contracts,
-        senders,
+        // Only include contracts and senders if user is super admin
+        ...(isSuperAdmin && { contracts, senders }),
         apiKeys,
         emailAlerts: emailAlerts.map(alert => ({
           email: alert.email,
@@ -850,7 +850,8 @@ export default function EditDappModal({
                 </div>
               </div>
 
-              {/* Contracts & Senders Section - Secondary Filter */}
+              {/* Contracts & Senders Section - Secondary Filter - Only visible to super_admin */}
+              {session?.user?.role === 'super_admin' && (
               <div className="space-y-4 bg-purple-50 border-l-4 border-purple-400 rounded-lg p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -992,6 +993,7 @@ export default function EditDappModal({
                   </div>
                 </div>
               </div>
+              )}
             </div>
 
             {/* User Access Section - Only visible to SUPER_ADMIN */}
