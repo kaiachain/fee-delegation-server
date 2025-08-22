@@ -1,12 +1,46 @@
-const nodemailer = require('nodemailer');
+const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
 
-function getTransport() {
-  const host = process.env.SMTP_HOST;
-  const port = Number(process.env.SMTP_PORT || 587);
-  const user = process.env.SMTP_USER;
-  const pass = process.env.SMTP_PASS;
-  if (!host || !user || !pass) throw new Error('SMTP not configured');
-  return nodemailer.createTransport({ host, port, secure: port === 465, auth: { user, pass } });
+function getSESClient() {
+  const region = process.env.AWS_REGION || 'us-east-1';
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  
+  if (!accessKeyId || !secretAccessKey) {
+    throw new Error('AWS SES credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY');
+  }
+  
+  return new SESClient({
+    region,
+    credentials: {
+      accessKeyId,
+      secretAccessKey,
+    },
+  });
+}
+
+async function sendEmailWithSES({ from, to, subject, html }) {
+  const sesClient = getSESClient();
+  
+  const command = new SendEmailCommand({
+    Source: from,
+    Destination: {
+      ToAddresses: [to],
+    },
+    Message: {
+      Subject: {
+        Data: subject,
+        Charset: 'UTF-8',
+      },
+      Body: {
+        Html: {
+          Data: html,
+          Charset: 'UTF-8',
+        },
+      },
+    },
+  });
+
+  return await sesClient.send(command);
 }
 
 function buildPasswordResetHtml(resetUrl) {
@@ -50,9 +84,12 @@ function buildPasswordResetHtml(resetUrl) {
 }
 
 async function sendPasswordResetEmail({ to, resetUrl }) {
-  const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
-  const transporter = getTransport();
-  await transporter.sendMail({
+  const from = process.env.FROM_EMAIL;
+  if (!from) {
+    throw new Error('FROM_EMAIL environment variable not configured');
+  }
+  
+  await sendEmailWithSES({
     from,
     to,
     subject: 'Reset your password',
@@ -146,9 +183,12 @@ function buildAccountCreatedWithPasswordSetupHtml(resetUrl) {
 }
 
 async function sendAccountCreatedEmail({ to, loginUrl }) {
-  const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
-  const transporter = getTransport();
-  await transporter.sendMail({
+  const from = process.env.FROM_EMAIL;
+  if (!from) {
+    throw new Error('FROM_EMAIL environment variable not configured');
+  }
+  
+  await sendEmailWithSES({
     from,
     to,
     subject: 'Your account has been created',
@@ -157,9 +197,12 @@ async function sendAccountCreatedEmail({ to, loginUrl }) {
 }
 
 async function sendAccountCreatedWithPasswordSetupEmail({ to, resetUrl }) {
-  const from = process.env.FROM_EMAIL || process.env.SMTP_USER;
-  const transporter = getTransport();
-  await transporter.sendMail({
+  const from = process.env.FROM_EMAIL;
+  if (!from) {
+    throw new Error('FROM_EMAIL environment variable not configured');
+  }
+  
+  await sendEmailWithSES({
     from,
     to,
     subject: 'Welcome to Kaia Fee Delegation - Set Your Password',
