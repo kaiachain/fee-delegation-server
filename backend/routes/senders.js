@@ -3,10 +3,10 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, checkDappHasApiKeys, checkSenderExistsForNoApiKeyDapps, checkSenderExistsForApiKeyDapps } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // POST /api/senders/check
-router.post('/check', requireEditor, async (req, res) => {
+router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { address } = req.body;
 
@@ -30,8 +30,15 @@ router.post('/check', requireEditor, async (req, res) => {
 });
 
 // POST /api/senders
-router.post('/', requireEditor, async (req, res) => {
+router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+
+    // Only super admin can modify senders
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify sender addresses");
+    }
+
     const { dappId, address } = req.body;
 
     if (!dappId || !address) {
@@ -75,8 +82,15 @@ router.post('/', requireEditor, async (req, res) => {
 });
 
 // DELETE /api/senders
-router.delete('/', requireEditor, async (req, res) => {
+router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+
+    // Only super admin can modify senders
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify sender addresses");
+    }
+
     const { id } = req.body;
 
     if (!id) {

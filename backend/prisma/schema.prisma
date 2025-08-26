@@ -20,6 +20,7 @@ model DApp {
   senders         Sender[]
   apiKeys         ApiKey[]
   emailAlerts     EmailAlert[]
+  userAccess      UserDappAccess[]
 }
 
 model ApiKey {
@@ -82,4 +83,53 @@ model EmailAlertLog {
   isRead    Boolean  @default(false)
 
   @@index([dappId], map: "EmailAlertLog_dappId_fkey")
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  EDITOR
+  VIEWER
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String?
+  role         UserRole  @default(VIEWER)
+  firstName    String
+  lastName     String
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  createdBy    String
+  lastLoginAt  DateTime?
+
+  resetTokens  PasswordResetToken[]
+  dappAccess   UserDappAccess[]
+
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiresAt])
+  @@index([userId, used])
+}
+
+model UserDappAccess {
+  id     String @id @default(cuid())
+  userId String
+  dappId String
+  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dapp   DApp   @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, dappId])
 }

@@ -3,7 +3,7 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 
 // GET /api/dapps
@@ -27,8 +27,12 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/dapps
-router.post('/', requireEditor, async (req, res) => {
+router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    // Only SUPER_ADMIN can create new DApps
+    if (req.user?.role !== 'super_admin') {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can create DApps");
+    }
 
     const { name, url, balance, terminationDate, contracts, senders, apiKeys, emailAlerts } = req.body;
 
@@ -196,18 +200,41 @@ router.post('/', requireEditor, async (req, res) => {
 });
 
 // PUT /api/dapps
-router.put('/', requireEditor, async (req, res) => {
+router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
-    const { id, name, url, balance, terminationDate, active, contracts, senders, apiKeys, emailAlerts } = req.body;
+    const { id, name, url, balance, terminationDate, active, contracts, senders, apiKeys, emailAlerts, userAccessEmails } = req.body;
 
     // Validate required fields
     if (!id) {
       return createResponse(res, "BAD_REQUEST", "DApp ID is required");
     }
 
+    // Authorization check for restricted fields
+    const isSuperAdmin = req.user?.role === 'super_admin';
+    const isEmailBasedEditor = req.user?.role === 'editor' && req.user?.provider === 'credentials';
+    
+    // Restricted fields validation
+    if (userAccessEmails !== undefined && !isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify user access");
+    }
+    
+    if (isEmailBasedEditor && (balance !== undefined || terminationDate !== undefined)) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify balance or service end date");
+    }
+    
+    // Editor role cannot modify contracts or senders
+    if (!isSuperAdmin && (contracts !== undefined || senders !== undefined)) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts or sender addresses");
+    }
+    
+    // Only SUPER_ADMIN can activate/deactivate DApps
+    if (active !== undefined && !isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can activate or deactivate DApps");
+    }
+
     // Check if this is a simple update (just basic fields) or full update
-    const isFullUpdate = contracts !== undefined || senders !== undefined || apiKeys !== undefined || emailAlerts !== undefined;
+    const isFullUpdate = contracts !== undefined || senders !== undefined || apiKeys !== undefined || emailAlerts !== undefined || userAccessEmails !== undefined;
 
     if (isFullUpdate) {
       // Full update with nested data
@@ -269,6 +296,25 @@ router.put('/', requireEditor, async (req, res) => {
         }
       }
 
+      // Validate userAccessEmails if provided
+      if (userAccessEmails !== undefined) {
+        const userAccessEmailsArray = Array.isArray(userAccessEmails) ? userAccessEmails : [];
+        const invalidEmails = [];
+        
+        for (const email of userAccessEmailsArray) {
+          const user = await prisma.user.findUnique({ 
+            where: { email, isActive: true } 
+          });
+          if (!user) {
+            invalidEmails.push(email);
+          }
+        }
+        
+        if (invalidEmails.length > 0) {
+          return createResponse(res, "BAD_REQUEST", `Invalid or inactive user emails: ${invalidEmails.join(', ')}`);
+        }
+      }
+
       try {
         // Use transaction to update everything atomically
         const result = await prisma.$transaction(async (tx) => {
@@ -282,23 +328,35 @@ router.put('/', requireEditor, async (req, res) => {
           const existingContracts = await tx.contract.findMany({ where: { dappId: id } });
           const existingSenders = await tx.sender.findMany({ where: { dappId: id } });
           const existingApiKeys = await tx.apiKey.findMany({ where: { dappId: id } });
+          const existingEmailAlerts = await tx.emailAlert.findMany({ where: { dappId: id } });
+          const existingUserAccess = await tx.userDappAccess.findMany({ 
+            where: { dappId: id },
+            include: { user: { select: { email: true } } }
+          });
 
           // Smart contract updates
           if (contracts !== undefined) {
-            console.log(`Smart updating contracts for DApp ${id}: ${existingContracts.length} existing, ${contracts.length} new`);
             await updateContracts(tx, id, existingContracts, contracts);
           }
 
           // Smart sender updates
           if (senders !== undefined) {
-            console.log(`Smart updating senders for DApp ${id}: ${existingSenders.length} existing, ${senders.length} new`);
             await updateSenders(tx, id, existingSenders, senders);
           }
 
           // Smart API key updates
           if (apiKeys !== undefined) {
-            console.log(`Smart updating API keys for DApp ${id}: ${existingApiKeys.length} existing, ${apiKeys.length} new`);
             await updateApiKeys(tx, id, existingApiKeys, apiKeys);
+          }
+
+          // Smart email alerts updates
+          if (emailAlerts !== undefined) {
+            await updateEmailAlerts(tx, id, existingEmailAlerts, emailAlerts);
+          }
+
+          // Smart user access updates
+          if (userAccessEmails !== undefined) {
+            await updateUserAccess(tx, id, existingUserAccess, userAccessEmails);
           }
 
           return updatedDapp;
@@ -316,6 +374,13 @@ router.put('/', requireEditor, async (req, res) => {
           senders: true,
           apiKeys: true,
           emailAlerts: true,
+          userAccess: {
+            include: { 
+              user: { 
+                select: { id: true, email: true, firstName: true, lastName: true, isActive: true } 
+              } 
+            }
+          },
         },
       });
 
@@ -324,7 +389,8 @@ router.put('/', requireEditor, async (req, res) => {
         emailAlerts: completeDapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
-        })) || []
+        })) || [],
+        assignedUsers: completeDapp.userAccess?.map((access) => access.user) || []
       });
 
     } else {
@@ -369,10 +435,28 @@ router.put('/', requireEditor, async (req, res) => {
       const dapp = await prisma.dApp.update({
         where: { id },
         data: updateData,
+        include: {
+          contracts: true,
+          senders: true,
+          apiKeys: true,
+          emailAlerts: true,
+          userAccess: {
+            include: { 
+              user: { 
+                select: { id: true, email: true, firstName: true, lastName: true, isActive: true } 
+              } 
+            }
+          },
+        },
       });
 
       return createResponse(res, "SUCCESS", {
         ...dapp,
+        emailAlerts: dapp.emailAlerts?.map((alert) => ({
+          ...alert,
+          balanceThreshold: alert.balanceThreshold
+        })) || [],
+        assignedUsers: dapp.userAccess?.map((access) => access.user) || []
       });
     }
 
@@ -391,8 +475,12 @@ router.put('/', requireEditor, async (req, res) => {
 });
 
 // DELETE /api/dapps
-router.delete('/', requireEditor, async (req, res) => {
+router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    // Only SUPER_ADMIN can delete DApps
+    if (req.user?.role !== 'super_admin') {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can delete DApps");
+    }
 
     const { id } = req.body;
 
@@ -410,7 +498,7 @@ router.delete('/', requireEditor, async (req, res) => {
 });
 
 // GET /api/dapps/management
-router.get('/management', requireEditor, async (req, res) => {
+router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
   try {
 
     const dapps = await prisma.dApp.findMany({
@@ -456,6 +544,19 @@ router.get('/management', requireEditor, async (req, res) => {
             isActive: true,
             createdAt: true
           }
+        },
+        userAccess: {
+          include: {
+            user: {
+              select: {
+                id: true,
+                email: true,
+                firstName: true,
+                lastName: true,
+                isActive: true
+              }
+            }
+          }
         }
       }
     });
@@ -474,7 +575,8 @@ router.get('/management', requireEditor, async (req, res) => {
         emailAlerts: dapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
-        })) || []
+        })) || [],
+        assignedUsers: dapp.userAccess?.map((access) => access.user) || []
       };
     });
 
@@ -565,7 +667,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
   // Delete contracts that are no longer in the new list
   const toDelete = existingContracts.filter(c => !newMap.has(c.address.toLowerCase()));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} contracts for DApp ${dappId}: ${toDelete.map(c => c.address).join(', ')}`);
     await tx.contract.deleteMany({
       where: { id: { in: toDelete.map(c => c.id) } }
     });
@@ -587,7 +688,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
         existingContract.active !== (newContract.active !== false);
       
       if (needsUpdate) {
-        console.log(`Updating contract ${address} for DApp ${dappId}`);
         await tx.contract.update({
           where: { id: existingContract.id },
           data: {
@@ -600,7 +700,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
       }
     } else {
       // Create new contract
-      console.log(`Creating new contract ${address} for DApp ${dappId}`);
       await tx.contract.create({
         data: {
           dappId,
@@ -613,8 +712,6 @@ const updateContracts = async (tx, dappId, existingContracts, newContracts) => {
       createdCount++;
     }
   }
-  
-  console.log(`Contracts update summary for DApp ${dappId}: ${toDelete.length} deleted, ${updatedCount} updated, ${createdCount} created`);
 };
 
 const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
@@ -624,7 +721,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
   // Delete senders that are no longer in the new list
   const toDelete = existingSenders.filter(s => !newMap.has(s.address.toLowerCase()));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} senders for DApp ${dappId}: ${toDelete.map(s => s.address).join(', ')}`);
     await tx.sender.deleteMany({
       where: { id: { in: toDelete.map(s => s.id) } }
     });
@@ -636,7 +732,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
   for (const newSender of newSenders) {
     const address = newSender.address.toLowerCase();
     if (!existingMap.has(address)) {
-      console.log(`Creating new sender ${address} for DApp ${dappId}`);
       await tx.sender.create({
         data: {
           dappId,
@@ -647,8 +742,6 @@ const updateSenders = async (tx, dappId, existingSenders, newSenders) => {
       createdCount++;
     }
   }
-  
-  console.log(`Senders update summary for DApp ${dappId}: ${toDelete.length} deleted, ${createdCount} created`);
 };
 
 const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
@@ -658,7 +751,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
   // Delete API keys that are no longer in the new list
   const toDelete = existingApiKeys.filter(k => !newMap.has(k.key));
   if (toDelete.length > 0) {
-    console.log(`Deleting ${toDelete.length} API keys for DApp ${dappId}: ${toDelete.map(k => k.name).join(', ')}`);
     await tx.apiKey.deleteMany({
       where: { id: { in: toDelete.map(k => k.id) } }
     });
@@ -678,7 +770,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
         existingApiKey.active !== (newApiKey.active !== false);
       
       if (needsUpdate) {
-        console.log(`Updating API key ${newApiKey.name} for DApp ${dappId}`);
         await tx.apiKey.update({
           where: { id: existingApiKey.id },
           data: { 
@@ -690,7 +781,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
       }
     } else {
       // Create new API key
-      console.log(`Creating new API key ${newApiKey.name} for DApp ${dappId}`);
       await tx.apiKey.create({
         data: {
           dappId,
@@ -702,8 +792,102 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
       createdCount++;
     }
   }
+};
+
+const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) => {
+  const existingEmails = new Set(existingUserAccess.map(access => access.user.email));
+  const targetEmailsSet = new Set(targetEmails);
   
-  console.log(`API keys update summary for DApp ${dappId}: ${toDelete.length} deleted, ${updatedCount} updated, ${createdCount} created`);
+  // Remove access for users not in target list
+  const toRemove = existingUserAccess.filter(access => !targetEmailsSet.has(access.user.email));
+  if (toRemove.length > 0) {
+    await tx.userDappAccess.deleteMany({
+      where: { id: { in: toRemove.map(access => access.id) } }
+    });
+  }
+  
+  let createdCount = 0;
+  
+  // Add access for new users
+  for (const email of targetEmails) {
+    if (!existingEmails.has(email)) {
+      // Get user ID for this email
+      const user = await tx.user.findUnique({ 
+        where: { email, isActive: true },
+        select: { id: true }
+      });
+      
+      if (user) {
+        await tx.userDappAccess.create({
+          data: {
+            userId: user.id,
+            dappId: dappId,
+          }
+        });
+        createdCount++;
+      }
+    }
+  }
+};
+
+const updateEmailAlerts = async (tx, dappId, existingEmailAlerts, newEmailAlerts) => {
+  const existingMap = new Map(existingEmailAlerts.map(e => [e.email, e]));
+  const newMap = new Map(newEmailAlerts.map(e => [e.email, e]));
+  
+  // Delete email alerts that are no longer in the new list
+  const toDelete = existingEmailAlerts.filter(e => !newMap.has(e.email));
+  if (toDelete.length > 0) {
+    await tx.emailAlert.deleteMany({
+      where: { id: { in: toDelete.map(e => e.id) } }
+    });
+  }
+  
+  let updatedCount = 0;
+  let createdCount = 0;
+  
+  // Update existing email alerts or create new ones
+  for (const newAlert of newEmailAlerts) {
+    const existingAlert = existingMap.get(newAlert.email);
+    
+    if (existingAlert) {
+      // Convert threshold to wei for comparison
+      const newThresholdWei = ethers.parseUnits(Number(newAlert.balanceThreshold).toString(), 18).toString();
+      
+      // Update existing email alert if data changed
+      const needsUpdate = 
+        existingAlert.balanceThreshold !== newThresholdWei ||
+        existingAlert.isActive !== (newAlert.isActive !== false);
+      
+      if (needsUpdate) {
+        await tx.emailAlert.update({
+          where: { id: existingAlert.id },
+          data: {
+            balanceThreshold: newThresholdWei,
+            isActive: newAlert.isActive !== false,
+          }
+        });
+        updatedCount++;
+      }
+    } else {
+      // Create new email alert
+      // Convert balance threshold to wei
+      const thresholdNum = Number(newAlert.balanceThreshold);
+      if (isNaN(thresholdNum) || thresholdNum < 0) {
+        throw new Error(`Invalid balance threshold: ${newAlert.balanceThreshold}`);
+      }
+      const thresholdWei = ethers.parseUnits(thresholdNum.toString(), 18);
+      
+      await tx.emailAlert.create({
+        data: {
+          dappId,
+          email: newAlert.email,
+          balanceThreshold: thresholdWei.toString(),
+          isActive: newAlert.isActive !== false,
+        }
+      });
+      createdCount++;
+    }
+  }
 };
 
 module.exports = router; 

@@ -1,7 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const nodemailer = require('nodemailer');
-const { Wallet, parseTransaction } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, parseTransaction, formatKaia } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
 const {
@@ -247,9 +246,10 @@ router.post('/', async (req, res) => {
 async function settlement(dapp, receipt) {
   if (process.env.NETWORK === 'mainnet') {
     if (dapp) {
-      if (receipt?.gasUsed !== undefined && receipt?.gasPrice !== undefined) {
+      const gasPriceValue = receipt?.gasPrice ?? receipt?.effectiveGasPrice;
+      if (receipt?.gasUsed !== undefined && gasPriceValue !== undefined) {
         const gasUsed = typeof receipt.gasUsed === 'bigint' ? receipt.gasUsed : BigInt(receipt.gasUsed);
-        const gasPrice = typeof receipt.gasPrice === 'bigint' ? receipt.gasPrice : BigInt(receipt.gasPrice);
+        const gasPrice = typeof gasPriceValue === 'bigint' ? gasPriceValue : BigInt(gasPriceValue);
         const usedFee = gasUsed * gasPrice;
         await updateDappWithFee(dapp, usedFee);
 
@@ -319,26 +319,28 @@ async function settlement(dapp, receipt) {
 
 async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold }) {
   try {
-    const host = process.env.SMTP_HOST || 'smtp.gmail.com' ;
-    const port = Number(process.env.SMTP_PORT || 587);
-    const user = process.env.SMTP_USER;
-    const pass = process.env.SMTP_PASS;
-    const from = process.env.FROM_EMAIL || user;
+    const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+    
+    const region = process.env.AWS_REGION || 'ap-southeast-1';
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+    const from = process.env.FROM_EMAIL;
 
-    if (!host || !user || !pass) {
-      console.warn('SMTP not configured; skipping email send');
-      return { success: false, error: 'SMTP not configured' };
+    if (!accessKeyId || !secretAccessKey || !from) {
+      console.warn('AWS SES not configured; skipping email send');
+      return { success: false, error: 'AWS SES not configured. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and FROM_EMAIL' };
     }
 
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure: port === 465,
-      auth: { user, pass },
+    const sesClient = new SESClient({
+      region,
+      credentials: {
+        accessKeyId,
+        secretAccessKey,
+      },
     });
 
-    const newBalanceFormatted = (BigInt(newBalance) / BigInt(10 ** 18)).toString();
-    const thresholdFormatted = (BigInt(threshold) / BigInt(10 ** 18)).toString();
+    const newBalanceFormatted = parseFloat(formatKaia(newBalance)).toFixed(4);
+    const thresholdFormatted = parseFloat(formatKaia(threshold)).toFixed(4);
 
     const subject = `Fee Delegation Alert - ${dappName} balance below threshold`;
     const text = `DApp: ${dappName}\nNew Balance (KAIA): ${newBalanceFormatted}\nThreshold (KAIA): ${thresholdFormatted}`;
@@ -473,7 +475,26 @@ async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold })
         </body>
         </html>`;
 
-    await transporter.sendMail({ from, to: email, subject, text, html });
+    const command = new SendEmailCommand({
+      Source: from,
+      Destination: {
+        ToAddresses: [email],
+      },
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          Html: {
+            Data: html,
+            Charset: 'UTF-8',
+          },
+        },
+      },
+    });
+
+    await sesClient.send(command);
     return { success: true };
   } catch (error) {
     return { success: false, error: error?.message || 'Unknown error' };
