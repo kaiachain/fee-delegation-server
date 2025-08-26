@@ -5,17 +5,19 @@ function getSESClient() {
   const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
   const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
   
-  if (!accessKeyId || !secretAccessKey) {
-    throw new Error('AWS SES credentials not configured. Please set AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY');
-  }
+  // Build SES client configuration
+  const clientConfig = { region };
   
-  return new SESClient({
-    region,
-    credentials: {
+  // Only include credentials if both are provided (for local development)
+  // If not provided, AWS SDK will use IAM roles, instance profiles, or other credential providers
+  if (accessKeyId && secretAccessKey) {
+    clientConfig.credentials = {
       accessKeyId,
       secretAccessKey,
-    },
-  });
+    };
+  }
+  
+  return new SESClient(clientConfig);
 }
 
 async function sendEmailWithSES({ from, to, subject, html }) {

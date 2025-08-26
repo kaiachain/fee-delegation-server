@@ -181,12 +181,11 @@ RPC_URL="https://rpc-endpoint-1,https://rpc-endpoint-2"  # Comma-separated RPC e
 # API Configuration
 NEXT_PUBLIC_API_URL="http://localhost:3000/api"  # Frontend API URL
 
-# SMTP Configuration (for email alerts)
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT="587"
-SMTP_USER="your-email@gmail.com"
-SMTP_PASS="your-app-password"
-FROM_EMAIL="noreply@yourdomain.com"
+# AWS SES Configuration (for email alerts)
+AWS_REGION="us-east-1"  # AWS region where your SES is configured
+AWS_ACCESS_KEY_ID="your-aws-access-key-id"  # Optional: only needed for local development
+AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"  # Optional: only needed for local development
+FROM_EMAIL="noreply@yourdomain.com"  # Must be verified in AWS SES
 
 # Pool Warning Thresholds (optional)
 NEXT_PUBLIC_POOL_WARNING_RED="10"  # Red warning threshold
@@ -211,6 +210,32 @@ npm run db:push
 ```bash
 npm run dev
 ```
+
+## AWS SES Setup
+
+To enable email functionality, you need to configure AWS SES:
+
+1. **Create an AWS account** if you don't have one
+2. **Navigate to AWS SES** in your preferred region
+3. **Verify your sender email address**:
+   - Go to SES → Verified identities
+   - Click "Create identity"
+   - Choose "Email address" and enter your FROM_EMAIL
+   - Check your email and click the verification link
+4. **Configure AWS credentials** (choose one option):
+   
+   **Option A: IAM Role (Recommended for AWS deployments)**
+   - Create an IAM role with SES send permissions
+   - Attach the role to your EC2 instance, ECS task, or Kubernetes pod
+   - No need to set `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in your environment
+   
+   **Option B: IAM User (For local development)**
+   - Go to IAM → Users → Create user
+   - Attach the `AmazonSESFullAccess` policy (or create a custom policy with SES send permissions)
+   - Create access keys and use them for `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`
+5. **Request production access** (if needed):
+   - By default, SES is in sandbox mode and can only send to verified email addresses
+   - To send to any email address, request production access in the SES console
 
 ## Docker Deployment
 
@@ -339,12 +364,11 @@ RPC_URL="https://rpc-endpoint-1,https://rpc-endpoint-2"  # Comma-separated RPC e
 # API Configuration
 NEXT_PUBLIC_API_URL="http://localhost:3000/api"  # Frontend API URL
 
-# SMTP Configuration (for email alerts)
-SMTP_HOST="smtp.gmail.com"
-SMTP_PORT="587"
-SMTP_USER="your-email@gmail.com"
-SMTP_PASS="your-app-password"
-FROM_EMAIL="noreply@yourdomain.com"
+# AWS SES Configuration (for email alerts)
+AWS_REGION="us-east-1"  # AWS region where your SES is configured
+AWS_ACCESS_KEY_ID="your-aws-access-key-id"  # Optional: only needed for local development
+AWS_SECRET_ACCESS_KEY="your-aws-secret-access-key"  # Optional: only needed for local development
+FROM_EMAIL="noreply@yourdomain.com"  # Must be verified in AWS SES
 
 # Pool Warning Thresholds (optional)
 NEXT_PUBLIC_POOL_WARNING_RED="10"  # Red warning threshold

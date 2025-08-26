@@ -326,18 +326,24 @@ async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold })
     const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
     const from = process.env.FROM_EMAIL;
 
-    if (!accessKeyId || !secretAccessKey || !from) {
+    if (!from) {
       console.warn('AWS SES not configured; skipping email send');
-      return { success: false, error: 'AWS SES not configured. Please set AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and FROM_EMAIL' };
+      return { success: false, error: 'AWS SES not configured. Please set FROM_EMAIL' };
     }
 
-    const sesClient = new SESClient({
-      region,
-      credentials: {
+    // Build SES client configuration
+    const clientConfig = { region };
+    
+    // Only include credentials if both are provided (for local development)
+    // If not provided, AWS SDK will use IAM roles, instance profiles, or other credential providers
+    if (accessKeyId && secretAccessKey) {
+      clientConfig.credentials = {
         accessKeyId,
         secretAccessKey,
-      },
-    });
+      };
+    }
+
+    const sesClient = new SESClient(clientConfig);
 
     const newBalanceFormatted = parseFloat(formatKaia(newBalance)).toFixed(4);
     const thresholdFormatted = parseFloat(formatKaia(threshold)).toFixed(4);
