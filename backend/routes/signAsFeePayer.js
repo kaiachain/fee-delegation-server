@@ -72,6 +72,7 @@ router.post('/', async (req, res) => {
     const userSignedTxRlp = userSignedTx.raw;
     let tx;
     try {
+      console.log('Request ID:'+ uniqueId + ' - Start : ' + userSignedTxRlp);
       tx = parseTransaction(userSignedTxRlp);
       console.log('Request ID:'+ uniqueId + ' - Tx Parsed: ' + JSON.stringify(tx));
     } catch (e) {
