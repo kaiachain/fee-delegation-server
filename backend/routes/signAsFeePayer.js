@@ -54,7 +54,7 @@ router.options('/', async (req, res) => {
  *         description: Internal server error
  */
 router.post('/', async (req, res) => {
-  
+  const uniqueId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   try {
     const { userSignedTx } = req.body || {};
 
@@ -65,6 +65,7 @@ router.post('/', async (req, res) => {
       : null;
 
     if (!userSignedTx || userSignedTx.raw === undefined) {
+      console.error('Request ID:'+ uniqueId + ' - userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }');
       return createResponse(res, 'BAD_REQUEST', 'userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }');
     }
 
@@ -72,8 +73,9 @@ router.post('/', async (req, res) => {
     let tx;
     try {
       tx = parseTransaction(userSignedTxRlp);
+      console.log('Request ID:'+ uniqueId + ' - Tx Parsed: ' + JSON.stringify(tx));
     } catch (e) {
-      console.error('Tx Parsing Error: ' + JSON.stringify(e));
+      console.error('Request ID:'+ uniqueId + ' - Tx Parsing Error: ' + JSON.stringify(e));
       return createResponse(res, 'BAD_REQUEST', 'Failed to parse transaction');
     }
 
@@ -97,6 +99,7 @@ router.post('/', async (req, res) => {
         });
 
         if (!dapp) {
+          console.error('Request ID:'+ uniqueId + ' - Dapp not configured. Please contact the administrator.');
           return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.');
         }
 
@@ -105,6 +108,7 @@ router.post('/', async (req, res) => {
           const isSenderWhitelisted = (dapp.senders || []).some((_sender) => _sender.address === sender);
 
           if (!isContractWhitelisted && !isSenderWhitelisted) {
+            console.error('Request ID:'+ uniqueId + ' - Contract or sender address are not whitelisted');
             return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted');
           }
         }
@@ -113,6 +117,7 @@ router.post('/', async (req, res) => {
         const { isWhitelisted, dapp: foundDapp } = await checkWhitelistedAndGetDapp(targetContract, sender);
 
         if (!isWhitelisted) {
+          console.error('Request ID:'+ uniqueId + ' - Contract or sender address are not whitelisted');
           return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted');
         }
 
@@ -120,6 +125,7 @@ router.post('/', async (req, res) => {
         dapp = foundDapp;
 
         if (!dapp) {
+          console.error('Request ID:'+ uniqueId + ' - Dapp not configured. Please contact the administrator.');
           return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.');
         }
       }
@@ -137,15 +143,18 @@ router.post('/', async (req, res) => {
       // Validate swap transaction if required
       const isValidSwap = await validateSwapTransaction(dappWithContracts, tx);
       if (!isValidSwap) {
+        console.error('Request ID:'+ uniqueId + ' - Swap token address is not whitelisted');
         return createResponse(res, 'BAD_REQUEST', 'Swap token address is not whitelisted');
       }
 
       // Check if DApp is active
       if (!dapp?.active) {
+        console.error('Request ID:'+ uniqueId + ' - DApp is inactive. Please contact the administrator to activate the DApp.');
         return createResponse(res, 'BAD_REQUEST', 'DApp is inactive. Please contact the administrator to activate the DApp.');
       }
 
       if (!isEnoughBalance(BigInt(dapp.balance || '0'))) {
+        console.error('Request ID:'+ uniqueId + ' - Insufficient balance in fee delegation server, please contact the administrator.');
         return createResponse(res, 'BAD_REQUEST', 'Insufficient balance in fee delegation server, please contact the administrator.');
       }
 
@@ -162,6 +171,7 @@ router.post('/', async (req, res) => {
         nextDayAfterTermination.setDate(nextDayAfterTermination.getDate() + 1);
 
         if (kstNow >= nextDayAfterTermination) {
+          console.error('Request ID:'+ uniqueId + ' - DApp is terminated. Please contact the administrator to activate the DApp.');
           return createResponse(res, 'BAD_REQUEST', 'DApp is terminated. Please contact the administrator to activate the DApp.');
         }
       }
@@ -178,6 +188,7 @@ router.post('/', async (req, res) => {
     let txHash;
     let sendCnt = 0;
     let errorMessage = '';
+    let isKnownTransaction = false;
     do {
       try {
         txHash = await provider.send('klay_sendRawTransaction', [feePayerSignedTx]);
@@ -185,12 +196,19 @@ router.post('/', async (req, res) => {
       } catch (e) {
         console.log(e);
         errorMessage = e?.error?.message || e?.message || e;
-        console.error('[' + sendCnt + ' try]' + 'Transaction send failed: sender - ' + sender + ', contract - ' + targetContract);
+        console.error('Request ID:'+ uniqueId + ' - [' + sendCnt + ' try]' + 'Transaction send failed: sender - ' + sender + ', contract - ' + targetContract);
+        if(errorMessage?.includes('known transaction: ')) {
+          isKnownTransaction = true;
+          txHash = "0x" + errorMessage?.split('known transaction: ')[1];
+          console.log('Request ID:'+ uniqueId + ' - Extracted txHash from known transaction: ', txHash);
+          break;
+        }
       }
       sendCnt++;
     } while (sendCnt < 5);
 
     if (!txHash) {
+      console.error('Request ID:'+ uniqueId + ' - Sending transaction was failed after 5 try, network is busy. Error message: ' + errorMessage);
       return createResponse(res, 'INTERNAL_ERROR', 'Sending transaction was failed after 5 try, network is busy. Error message: ' + errorMessage);
     }
 
@@ -198,44 +216,48 @@ router.post('/', async (req, res) => {
     let waitCnt = 0;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('waiting for receipt', waitCnt);
+      console.log('Request ID:'+ uniqueId + ' - waiting for receipt', waitCnt);
       try {
         receipt = await provider.getTransactionReceipt(txHash);
         if (receipt) {
           break;
         }
       } catch (e) {
-        console.error('Error getting transaction receipt for txHash: ' + txHash + ' : ' + JSON.stringify(e));
+        console.error('Request ID:'+ uniqueId + ' - Error getting transaction receipt for txHash: ' + txHash + ' : ' + JSON.stringify(e));
       }
 
       waitCnt++;
     } while (waitCnt < 15);
 
     if (!receipt) {
+      console.error('Request ID:'+ uniqueId + ' - Transaction was failed');
       return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed');
     }
 
     try {
-      await settlement(dapp, receipt);
+      if(!isKnownTransaction) {
+        console.log('Request ID:'+ uniqueId + ' - Settlement started');
+        await settlement(dapp, receipt);
+      }
     } catch (error) {
-      console.error(JSON.stringify(error));
+      console.error('Request ID:'+ uniqueId + ' - Error Settlement: ' + txHash + ' : ' + JSON.stringify(error));
       return createResponse(res, 'INTERNAL_ERROR', JSON.stringify(error));
     }
 
     if (receipt.status === 0) {
-      console.error('[REVERTED] Transaction hash: ', txHash);
+      console.error('Request ID:'+ uniqueId + ' - [REVERTED] Transaction hash: ', txHash);
       return createResponse(res, 'REVERTED', receipt);
     }
 
-    console.info('[SUCCESS] Transaction hash: ', txHash);
+    console.info('Request ID:'+ uniqueId + ' - [SUCCESS] Transaction hash: ', txHash);
     return createResponse(res, 'SUCCESS', receipt);
   } catch (error) {
     const errorMsg = JSON.parse(JSON.stringify(error));
-    console.error(JSON.stringify(errorMsg));
+    console.error('Request ID:'+ uniqueId + ' - ' + JSON.stringify(errorMsg));
 
     const returnErrorMsg = (errorMsg && errorMsg.error && errorMsg.error.message) || errorMsg?.shortMessage;
     if (!returnErrorMsg) {
-      console.error('Error message is empty', JSON.stringify(error));
+      console.error('Request ID:'+ uniqueId + ' - Error message is empty', JSON.stringify(error));
       return createResponse(res, 'INTERNAL_ERROR', JSON.stringify(errorMsg));
     }
 
