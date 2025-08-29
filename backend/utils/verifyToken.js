@@ -21,9 +21,12 @@ async function verify(idToken) {
       return { ...payload, role: "viewer" };
     }
 
-    return { ...payload, role: "editor" };
+    return { ...payload, role: "super_admin" };
   } catch (error) {
-    console.error("Token verification failed:", error);
+    // Don't log expected JWT format mismatches (NextAuth vs Google tokens)
+    if (!error.message?.includes("No pem found for envelope")) {
+      console.error("Token verification failed:", error);
+    }
     throw new Error("Invalid token");
   }
 }

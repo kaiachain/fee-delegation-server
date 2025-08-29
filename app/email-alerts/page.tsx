@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { fetchData } from "@/lib/apiUtils";
+import { formatEther } from "ethers";
 
 interface EmailAlertLog {
   id: string;
@@ -104,7 +105,7 @@ export default function EmailAlertsPage() {
   };
 
   const formatBalance = (balance: string) => {
-    return (BigInt(balance) / BigInt(10 ** 18)).toString();
+    return parseFloat(formatEther(balance)).toFixed(4);
   };
 
   const formatDate = (dateString: string) => {
@@ -114,7 +115,7 @@ export default function EmailAlertsPage() {
   useEffect(() => {
     if (status === "loading") return;
     
-    if (!session || session?.sessionExpired || session?.user.role !== "editor") {
+    if (!session || session?.sessionExpired || (session?.user.role !== "editor" && session?.user.role !== "super_admin")) {
       setIsLoading(false);
       return;
     }
@@ -207,7 +208,7 @@ export default function EmailAlertsPage() {
     );
   }
 
-  if (!session || session?.sessionExpired || session?.user.role !== "editor") {
+  if (!session || session?.sessionExpired || (session?.user.role !== "editor" && session?.user.role !== "super_admin")) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

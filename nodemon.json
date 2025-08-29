@@ -1,0 +1,9 @@
+{
+  "watch": ["server.js", "backend/**/*", "lib/**/*"],
+  "ext": "js,ts,json",
+  "ignore": ["node_modules/**/*", ".next/**/*", "frontend/**/*"],
+  "exec": "node server.js",
+  "env": {
+    "NODE_ENV": "development"
+  }
+}

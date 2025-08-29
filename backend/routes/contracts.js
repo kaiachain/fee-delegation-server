@@ -3,10 +3,10 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, checkDappHasApiKeys, checkContractExistsForNoApiKeyDapps, checkContractExistsForApiKeyDapps } = require('../utils/apiUtils');
-const { requireEditor } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // POST /api/contracts/check
-router.post('/check', requireEditor, async (req, res) => {
+router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
   try {
     const { address, hasSwap, swapAddress } = req.body;
 
@@ -32,8 +32,14 @@ router.post('/check', requireEditor, async (req, res) => {
 });
 
 // POST /api/contracts
-router.post('/', requireEditor, async (req, res) => {
+router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+    // Only super admin can modify contracts
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts");
+    }
+
     const { dappId, address, hasSwap, swapAddress } = req.body;
 
     if (!dappId || !address) {
@@ -84,8 +90,14 @@ router.post('/', requireEditor, async (req, res) => {
 });
 
 // DELETE /api/contracts
-router.delete('/', requireEditor, async (req, res) => {
+router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
   try {
+    const isSuperAdmin = req.user?.role === 'super_admin';
+    // Only super admin can modify contracts
+    if (!isSuperAdmin) {
+      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts");
+    }
+
     const { id } = req.body;
 
     if (!id) {

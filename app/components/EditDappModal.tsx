@@ -57,6 +57,11 @@ export default function EditDappModal({
   );
   const [newEmailAlert, setNewEmailAlert] = useState({email: "", balanceThreshold: 0, isActive: true});
   
+  // User Access (only for SUPER_ADMIN)
+  const [assignedUsers, setAssignedUsers] = useState<Array<{id: string, email: string, firstName: string, lastName: string, isActive: boolean}>>((dapp as any).assignedUsers || []);
+  const [newUserEmail, setNewUserEmail] = useState("");
+  const [isValidatingUser, setIsValidatingUser] = useState(false);
+  
   // Error handling
   const [errorModal, setErrorModal] = useState<{ isOpen: boolean; title: string; message: string }>({
     isOpen: false,
@@ -97,6 +102,7 @@ export default function EditDappModal({
         balanceThreshold: Number(ethers.formatUnits(alert.balanceThreshold || "0", "ether")),
         isActive: alert.isActive
       })));
+      setAssignedUsers((dapp as any).assignedUsers || []);
     }
   }, [isModalOpen, dapp]);
 
@@ -303,6 +309,68 @@ export default function EditDappModal({
     setApiKeys(apiKeys.filter((_, i) => i !== index));
   };
 
+  // User Access Management Functions
+  const addAssignedUser = async () => {
+    if (!newUserEmail.trim()) {
+      setErrorModal({
+        isOpen: true,
+        title: "Invalid Email",
+        message: "Please enter a valid email address."
+      });
+      return;
+    }
+
+    // Check if user is already assigned
+    if (assignedUsers.some(user => user.email === newUserEmail.trim())) {
+      setErrorModal({
+        isOpen: true,
+        title: "User Already Assigned",
+        message: "This user is already assigned to this DApp."
+      });
+      return;
+    }
+
+    setIsValidatingUser(true);
+    try {
+      // Validate user exists using the dedicated validation endpoint
+      const result = await fetchData(`/users/validate/${encodeURIComponent(newUserEmail.trim())}`, { method: "GET" }, session);
+      
+      if (!result.status) {
+        setErrorModal({
+          isOpen: true,
+          title: result.error === 'NOT_FOUND' ? "User Not Found" : "Validation Error",
+          message: result.message || "Unable to validate user. Please try again."
+        });
+        return;
+      }
+
+      // Add the validated user to the list
+      const validatedUser = {
+        id: result.data.id,
+        email: result.data.email,
+        firstName: result.data.firstName,
+        lastName: result.data.lastName,
+        isActive: result.data.isActive
+      };
+
+      setAssignedUsers([...assignedUsers, validatedUser]);
+      setNewUserEmail("");
+
+    } catch (error) {
+      setErrorModal({
+        isOpen: true,
+        title: "Validation Error",
+        message: "An error occurred while validating the user. Please try again."
+      });
+    } finally {
+      setIsValidatingUser(false);
+    }
+  };
+
+  const removeAssignedUser = (email: string) => {
+    setAssignedUsers(assignedUsers.filter(user => user.email !== email));
+  };
+
   const handleUpdateDapp = async () => {
     if (name.trim() && url.trim() && balance >= 0) {
       // Check if at least one form of access control is provided
@@ -315,20 +383,27 @@ export default function EditDappModal({
         return;
       }
 
+      const isSuperAdmin = session?.user?.role === 'super_admin';
+
       const updatedDapp = {
         id: dapp.id,
         name,
         url,
-        balance,
-        ...(terminationDate && { terminationDate: convertKSTtoUTC(terminationDate) }),
-        contracts,
-        senders,
+        // Only include balance and terminationDate for SUPER_ADMIN and Google Editors
+        ...(isSuperAdmin ? {
+          balance,
+          ...(terminationDate && { terminationDate: convertKSTtoUTC(terminationDate) }),
+        } : {}),
+        // Only include contracts and senders if user is super admin
+        ...(isSuperAdmin && { contracts, senders }),
         apiKeys,
         emailAlerts: emailAlerts.map(alert => ({
           email: alert.email,
           balanceThreshold: alert.balanceThreshold.toString(),
           isActive: alert.isActive
         })),
+        // Only super admin can modify userAccessEmails
+        ...(isSuperAdmin && { userAccessEmails: assignedUsers.map(user => user.email) }),
       };
 
       // Update dapp in the database
@@ -462,14 +537,15 @@ export default function EditDappModal({
                 />
               </div>
 
-              {/* Balance Input */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span>Balance<span className="text-red-500 ml-1">*</span></span>
-                </label>
+              {/* Balance Input - Only for SUPER_ADMIN and Google Editors */}
+              {(session?.user?.role === 'super_admin' || session?.user?.provider === 'google') && (
+                <div>
+                  <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>Balance<span className="text-red-500 ml-1">*</span></span>
+                  </label>
                 <div className="relative">
                   <input
                     type="number"
@@ -496,24 +572,27 @@ export default function EditDappModal({
                     <span className="text-gray-500 text-sm">KAIA</span>
                   </div>
                 </div>
-              </div>
+                </div>
+              )}
 
-              {/* Termination Date Input */}
-              <div>
-                <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                  </svg>
-                  <span>Service End Date (KST)</span>
-                </label>
-                <input
-                  type="date"
-                  value={terminationDate}
-                  onChange={(e) => setTerminationDate(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
-                />
-                <p className="mt-1 text-xs text-gray-500">Service will work normally on the selected date and stop on the next day in KST</p>
-              </div>
+              {/* Service End Date - Only for SUPER_ADMIN and Google Editors */}
+              {(session?.user?.role === 'super_admin' || session?.user?.provider === 'google') && (
+                <div>
+                  <label className="flex items-center space-x-2 text-sm font-medium text-gray-700 mb-1">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                    </svg>
+                    <span>Service End Date (KST)</span>
+                  </label>
+                  <input
+                    type="date"
+                    value={terminationDate}
+                    onChange={(e) => setTerminationDate(e.target.value)}
+                    className="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900 placeholder-gray-500 transition-colors duration-200"
+                  />
+                  <p className="mt-1 text-xs text-gray-500">Service will work normally on the selected date and stop on the next day in KST</p>
+                </div>
+              )}
             </div>
 
             {/* Email Alerts Section */}
@@ -771,7 +850,8 @@ export default function EditDappModal({
                 </div>
               </div>
 
-              {/* Contracts & Senders Section - Secondary Filter */}
+              {/* Contracts & Senders Section - Secondary Filter - Only visible to super_admin */}
+              {session?.user?.role === 'super_admin' && (
               <div className="space-y-4 bg-purple-50 border-l-4 border-purple-400 rounded-lg p-4 shadow-sm">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
@@ -913,7 +993,108 @@ export default function EditDappModal({
                   </div>
                 </div>
               </div>
+              )}
             </div>
+
+            {/* User Access Section - Only visible to SUPER_ADMIN */}
+            {session?.user?.role === 'super_admin' && (
+              <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-2.025" />
+                    </svg>
+                    <h3 className="text-lg font-bold text-gray-800">Assigned Users</h3>
+                  </div>
+                </div>
+                <div className="space-y-4 bg-indigo-50 border-l-4 border-indigo-400 rounded-lg p-4 shadow-sm">
+                  <div className="flex items-center space-x-2">
+                    <svg className="w-5 h-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857M17 16a3 3 0 00-6 0M7 16a3 3 0 016 0" />
+                    </svg>
+                    <h3 className="text-lg font-medium text-indigo-800">User Management</h3>
+                  </div>
+                  
+                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                    <div className="flex">
+                      <div className="flex-shrink-0">
+                        <svg className="h-5 w-5 text-indigo-500" viewBox="0 0 20 20" fill="currentColor">
+                          <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                      <div className="ml-3">
+                        <p className="text-sm text-indigo-700">
+                          Assign email-based users to this DApp. Only email users (not Google OAuth users) need to be assigned to access DApps.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Add User Input */}
+                  <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                    <h4 className="text-md font-semibold text-indigo-800 mb-3">Add New User</h4>
+                    <div className="flex items-center space-x-3">
+                      <input
+                        type="email"
+                        value={newUserEmail}
+                        onChange={(e) => setNewUserEmail(e.target.value)}
+                        placeholder="user@example.com"
+                        className="flex-1 px-4 py-2 border border-indigo-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-gray-900 placeholder-gray-500"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            addAssignedUser();
+                          }
+                        }}
+                      />
+                      <button
+                        onClick={addAssignedUser}
+                        disabled={isValidatingUser}
+                        className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors duration-200 font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        {isValidatingUser ? 'Validating...' : 'Add User'}
+                      </button>
+                    </div>
+                  </div>
+                  
+                  {/* Assigned Users List */}
+                  {assignedUsers.length > 0 && (
+                    <div className="bg-white border border-indigo-200 rounded-lg p-4">
+                      <h4 className="text-md font-semibold text-indigo-800 mb-3">
+                        Assigned Users ({assignedUsers.length})
+                      </h4>
+                      <div className="space-y-3">
+                        {assignedUsers.map((user, index) => (
+                          <div
+                            key={`${user.email}-${index}`}
+                            className="flex items-center justify-between p-3 bg-indigo-50 rounded-lg border border-indigo-200"
+                          >
+                            <div className="flex items-center space-x-3">
+                              <div className="w-8 h-8 bg-indigo-600 text-white rounded-full flex items-center justify-center text-sm font-semibold">
+                                {user.firstName?.charAt(0) || '?'}{user.lastName?.charAt(0) || '?'}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-indigo-900">
+                                  {user.firstName} {user.lastName}
+                                </p>
+                                <p className="text-sm text-indigo-600">{user.email}</p>
+                              </div>
+                            </div>
+                            <button
+                              onClick={() => removeAssignedUser(user.email)}
+                              className="text-red-500 hover:text-red-600 transition-colors duration-200"
+                            >
+                              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Footer */}
