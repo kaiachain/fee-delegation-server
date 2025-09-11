@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
-const { createResponse, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
+const { createResponse, getCleanErrorMessage, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 
@@ -193,7 +193,7 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
   } catch (error) {
     console.error("Error creating dapp:", error);
     if (error instanceof Error) {
-      return createResponse(res, "INTERNAL_ERROR", `Failed to create dapp: ${error.message}`);
+      return createResponse(res, "INTERNAL_ERROR", `Failed to create dapp: ${getCleanErrorMessage(error)}`);
     }
     return createResponse(res, "INTERNAL_ERROR", "Failed to create dapp");
   }
@@ -363,7 +363,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
         });
       } catch (error) {
         console.error("Transaction error:", error);
-        return createResponse(res, "INTERNAL_ERROR", `Transaction failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        return createResponse(res, "INTERNAL_ERROR", `Transaction failed: ${getCleanErrorMessage(error)}`);
       }
 
       // Fetch the complete updated DApp with all relations
@@ -470,7 +470,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
     if (error && typeof error === 'object' && 'code' in error && error.code === 'P2002') {
       return createResponse(res, "CONFLICT", "A DApp with this name already exists");
     }
-    return createResponse(res, "INTERNAL_ERROR", `Failed to update dapp: ${error && typeof error === 'object' && 'message' in error ? String(error.message) : 'Unknown error'}`);
+    return createResponse(res, "INTERNAL_ERROR", `Failed to update dapp: ${getCleanErrorMessage(error)}`);
   }
 });
 

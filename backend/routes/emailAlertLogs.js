@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
-const { createResponse, applyDappAccessFilter, hasUserDappAccess } = require('../utils/apiUtils');
+const { createResponse, getCleanErrorMessage, applyDappAccessFilter, hasUserDappAccess } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 // GET /api/email-alert-logs
@@ -121,7 +121,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 
   } catch (error) {
     console.error("Error marking email alert logs as read:", error);
-    return createResponse(res, "INTERNAL_ERROR", `Failed to mark email alert logs as read: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    return createResponse(res, "INTERNAL_ERROR", `Failed to mark email alert logs as read: ${getCleanErrorMessage(error)}`);
   }
 });
 
