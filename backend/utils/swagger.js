@@ -124,6 +124,11 @@ const options = {
             status: {
               type: 'boolean',
               example: true
+            },
+            requestId: {
+              type: 'string',
+              description: 'Unique request identifier for tracking',
+              example: 'abc123def456ghi789'
             }
           }
         },
@@ -136,16 +141,21 @@ const options = {
             },
             data: {
               type: 'string',
-              example: 'Contract or sender address are not whitelisted'
+              example: 'Failed to parse transaction: Cannot set field \'from\' to invalid address'
             },
             error: {
               type: 'string',
-              enum: ['BAD_REQUEST', 'INTERNAL_ERROR', 'REVERTED', 'NOT_FOUND'],
+              enum: ['BAD_REQUEST', 'INTERNAL_ERROR', 'REVERTED', 'NOT_FOUND', 'UNAUTHORIZED', 'CONFLICT'],
               example: 'BAD_REQUEST'
             },
             status: {
               type: 'boolean',
               example: false
+            },
+            requestId: {
+              type: 'string',
+              description: 'Unique request identifier for tracking',
+              example: 'xyz789abc123def456'
             }
           }
         },
@@ -164,6 +174,36 @@ const options = {
             status: {
               type: 'boolean',
               example: true
+            },
+            requestId: {
+              type: 'string',
+              description: 'Unique request identifier for tracking',
+              example: 'pool123abc456def789'
+            }
+          }
+        },
+        RevertedResponse: {
+          type: 'object',
+          properties: {
+            message: {
+              type: 'string',
+              example: 'Transaction reverted'
+            },
+            data: {
+              $ref: '#/components/schemas/TransactionReceipt'
+            },
+            error: {
+              type: 'string',
+              example: 'REVERTED'
+            },
+            status: {
+              type: 'boolean',
+              example: false
+            },
+            requestId: {
+              type: 'string',
+              description: 'Unique request identifier for tracking',
+              example: 'rev456def789abc123'
             }
           }
         }

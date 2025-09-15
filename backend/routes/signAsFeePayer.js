@@ -29,9 +29,19 @@ router.options('/', async (req, res) => {
  *     description: |
  *       Submit a user-signed fee-delegated transaction to be processed and paid by the fee delegation service.
  *       
- *       Authentication Options:
- *       - API Key: Include Bearer token in Authorization header
- *       - Address Whitelisting: No authentication required if sender/contract is whitelisted
+ *       **Authentication Options:**
+ *       - **API Key**: Include Bearer token in Authorization header
+ *       - **Address Whitelisting**: No authentication required if sender/contract is whitelisted
+ *       
+ *       **Validation Rules:**
+ *       - Gas price must not exceed 50 gwei (50,000,000,000 wei)
+ *       - Sender/contract addresses must be whitelisted (unless using API key)
+ *       - DApp must be active and have sufficient balance
+ *       - Transaction must be properly signed and formatted
+ *       
+ *       **Response includes:**
+ *       - Unique request ID for error tracking
+ *       - Sanitized error messages (RPC URLs hidden for security)
  *     security:
  *       - BearerAuth: []
  *       - {}
@@ -51,10 +61,109 @@ router.options('/', async (req, res) => {
  *     responses:
  *       200:
  *         description: Transaction processed successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               oneOf:
+ *                 - $ref: '#/components/schemas/SuccessResponse'
+ *                 - $ref: '#/components/schemas/RevertedResponse'
+ *             examples:
+ *               success:
+ *                 summary: Successful Transaction
+ *                 value:
+ *                   message: "Request was successful"
+ *                   data:
+ *                     _type: "TransactionReceipt"
+ *                     blockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                     blockNumber: 12345678
+ *                     contractAddress: null
+ *                     cumulativeGasUsed: "21000"
+ *                     from: "0x1234567890123456789012345678901234567890"
+ *                     gasPrice: "25000000000"
+ *                     blobGasUsed: null
+ *                     blobGasPrice: null
+ *                     gasUsed: "21000"
+ *                     hash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+ *                     index: 0
+ *                     logs: []
+ *                     logsBloom: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+ *                     status: 1
+ *                     to: "0x9876543210987654321098765432109876543210"
+ *                   status: true
+ *                   requestId: "req123abc456def789"
+ *               reverted:
+ *                 summary: Transaction Reverted
+ *                 value:
+ *                   message: "Transaction reverted"
+ *                   data:
+ *                     _type: "TransactionReceipt"
+ *                     blockHash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+ *                     blockNumber: 87654321
+ *                     contractAddress: null
+ *                     cumulativeGasUsed: "50000"
+ *                     from: "0x1111111111111111111111111111111111111111"
+ *                     gasPrice: "30000000000"
+ *                     gasUsed: "45000"
+ *                     hash: "0x9999999999999999999999999999999999999999999999999999999999999999"
+ *                     status: 0
+ *                     to: "0x2222222222222222222222222222222222222222"
+ *                   error: "REVERTED"
+ *                   status: false
+ *                   requestId: "rev456def789abc123"
  *       400:
  *         description: Bad request - validation failed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               parsing_error:
+ *                 summary: Transaction Parsing Error
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Failed to parse transaction: Invalid transaction format"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *                   requestId: "parse123error456"
+ *               gas_limit_exceeded:
+ *                 summary: Gas Price Too High
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Gas price exceeds maximum limit of 50 gwei"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *                   requestId: "gas789limit123"
+ *               not_whitelisted:
+ *                 summary: Address Not Whitelisted
+ *                 value:
+ *                   message: "Bad request"
+ *                   data: "Contract or sender address are not whitelisted"
+ *                   error: "BAD_REQUEST"
+ *                   status: false
+ *                   requestId: "whitelist456error"
  *       500:
  *         description: Internal server error
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/ErrorResponse'
+ *             examples:
+ *               rpc_error:
+ *                 summary: RPC Network Error
+ *                 value:
+ *                   message: "Internal server error"
+ *                   data: "Sending transaction was failed after 5 try, network is busy. Error message: Network timeout [RPC_URL_HIDDEN]"
+ *                   error: "INTERNAL_ERROR"
+ *                   status: false
+ *                   requestId: "rpc123network456"
+ *               settlement_error:
+ *                 summary: Settlement Failed
+ *                 value:
+ *                   message: "Internal server error"
+ *                   data: "Settlement failed: Database connection error"
+ *                   error: "INTERNAL_ERROR"
+ *                   status: false
+ *                   requestId: "settle789error123"
  */
 router.post('/', async (req, res) => {
   const uniqueId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
