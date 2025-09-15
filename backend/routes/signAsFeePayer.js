@@ -5,6 +5,9 @@ const { pickProviderFromPool } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
 const {
   createResponse,
+  sanitizeErrorMessage,
+  logError,
+  getCleanErrorMessage,
   checkWhitelistedAndGetDapp,
   isEnoughBalance,
   updateDappWithFee,
@@ -14,7 +17,7 @@ const {
 
 // OPTIONS /api/signAsFeePayer
 router.options('/', async (req, res) => {
-  return createResponse(res, 'SUCCESS', {});
+  return createResponse(res, 'SUCCESS', {}, null);
 });
 
 /**
@@ -66,7 +69,7 @@ router.post('/', async (req, res) => {
 
     if (!userSignedTx || userSignedTx.raw === undefined) {
       console.error('Request ID:'+ uniqueId + ' - userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }');
-      return createResponse(res, 'BAD_REQUEST', 'userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }');
+      return createResponse(res, 'BAD_REQUEST', 'userSignedTx is required, [format] -- { userSignedTx: { raw: user signed rlp encoded transaction } }', uniqueId);
     }
 
     const userSignedTxRlp = userSignedTx.raw;
@@ -76,8 +79,17 @@ router.post('/', async (req, res) => {
       tx = parseTransaction(userSignedTxRlp);
       console.log('Request ID:'+ uniqueId + ' - Tx Parsed: ' + JSON.stringify(tx));
     } catch (e) {
-      console.error('Request ID:'+ uniqueId + ' - Tx Parsing Error: ' + JSON.stringify(e));
-      return createResponse(res, 'BAD_REQUEST', 'Failed to parse transaction');
+      // Log error cleanly and return sanitized message to client
+      logError(e, uniqueId, 'Transaction parsing failed');
+      return createResponse(res, 'BAD_REQUEST', `Failed to parse transaction: ${getCleanErrorMessage(e)}`, uniqueId);
+    }
+
+    // Add gas limit validation (50 gwei max)
+    const MAX_GAS_PRICE = BigInt('50000000000'); // 50 gwei in wei
+    const currentGasPrice = BigInt(tx.gasPrice || '0');
+    if (currentGasPrice > MAX_GAS_PRICE) {
+      console.error('Request ID:'+ uniqueId + ' - Gas price too high: ' + currentGasPrice.toString() + ' wei (max: ' + MAX_GAS_PRICE.toString() + ' wei)');
+      return createResponse(res, 'BAD_REQUEST', 'Gas price exceeds maximum limit of 50 gwei', uniqueId);
     }
 
     let dapp;
@@ -90,7 +102,7 @@ router.post('/', async (req, res) => {
       if (apiKey) {
         const apiKeyDapp = await getDappByApiKey(apiKey);
         if (!apiKeyDapp) {
-          return createResponse(res, 'BAD_REQUEST', 'Invalid API key');
+          return createResponse(res, 'BAD_REQUEST', 'Invalid API key', uniqueId);
         }
 
         // Enrich dapp with contracts and senders for whitelist checks and swap validation
@@ -101,7 +113,7 @@ router.post('/', async (req, res) => {
 
         if (!dapp) {
           console.error('Request ID:'+ uniqueId + ' - Dapp not configured. Please contact the administrator.');
-          return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.');
+          return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.', uniqueId);
         }
 
         if (Array.isArray(dapp.contracts) && dapp.contracts.length > 0 || Array.isArray(dapp.senders) && dapp.senders.length > 0) {
@@ -110,7 +122,7 @@ router.post('/', async (req, res) => {
 
           if (!isContractWhitelisted && !isSenderWhitelisted) {
             console.error('Request ID:'+ uniqueId + ' - Contract or sender address are not whitelisted');
-            return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted');
+            return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted', uniqueId);
           }
         }
       } else {
@@ -119,7 +131,7 @@ router.post('/', async (req, res) => {
 
         if (!isWhitelisted) {
           console.error('Request ID:'+ uniqueId + ' - Contract or sender address are not whitelisted');
-          return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted');
+          return createResponse(res, 'BAD_REQUEST', 'Contract or sender address are not whitelisted', uniqueId);
         }
 
         tx.feePayer = process.env.ACCOUNT_ADDRESS || '';
@@ -127,7 +139,7 @@ router.post('/', async (req, res) => {
 
         if (!dapp) {
           console.error('Request ID:'+ uniqueId + ' - Dapp not configured. Please contact the administrator.');
-          return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.');
+          return createResponse(res, 'BAD_REQUEST', 'Dapp not configured. Please contact the administrator.', uniqueId);
         }
       }
 
@@ -145,18 +157,18 @@ router.post('/', async (req, res) => {
       const isValidSwap = await validateSwapTransaction(dappWithContracts, tx);
       if (!isValidSwap) {
         console.error('Request ID:'+ uniqueId + ' - Swap token address is not whitelisted');
-        return createResponse(res, 'BAD_REQUEST', 'Swap token address is not whitelisted');
+        return createResponse(res, 'BAD_REQUEST', 'Swap token address is not whitelisted', uniqueId);
       }
 
       // Check if DApp is active
       if (!dapp?.active) {
         console.error('Request ID:'+ uniqueId + ' - DApp is inactive. Please contact the administrator to activate the DApp.');
-        return createResponse(res, 'BAD_REQUEST', 'DApp is inactive. Please contact the administrator to activate the DApp.');
+        return createResponse(res, 'BAD_REQUEST', 'DApp is inactive. Please contact the administrator to activate the DApp.', uniqueId);
       }
 
       if (!isEnoughBalance(BigInt(dapp.balance || '0'))) {
         console.error('Request ID:'+ uniqueId + ' - Insufficient balance in fee delegation server, please contact the administrator.');
-        return createResponse(res, 'BAD_REQUEST', 'Insufficient balance in fee delegation server, please contact the administrator.');
+        return createResponse(res, 'BAD_REQUEST', 'Insufficient balance in fee delegation server, please contact the administrator.', uniqueId);
       }
 
       // Check if the Dapp has a termination date
@@ -173,7 +185,7 @@ router.post('/', async (req, res) => {
 
         if (kstNow >= nextDayAfterTermination) {
           console.error('Request ID:'+ uniqueId + ' - DApp is terminated. Please contact the administrator to activate the DApp.');
-          return createResponse(res, 'BAD_REQUEST', 'DApp is terminated. Please contact the administrator to activate the DApp.');
+          return createResponse(res, 'BAD_REQUEST', 'DApp is terminated. Please contact the administrator to activate the DApp.', uniqueId);
         }
       }
     }
@@ -189,28 +201,23 @@ router.post('/', async (req, res) => {
     let txHash;
     let sendCnt = 0;
     let errorMessage = '';
-    let isKnownTransaction = false;
     do {
       try {
         txHash = await provider.send('klay_sendRawTransaction', [feePayerSignedTx]);
         if (txHash) break;
       } catch (e) {
-        console.log(e);
-        errorMessage = e?.error?.message || e?.message || e;
-        console.error('Request ID:'+ uniqueId + ' - [' + sendCnt + ' try]' + 'Transaction send failed: sender - ' + sender + ', contract - ' + targetContract);
-        if(errorMessage?.includes('known transaction: ')) {
-          isKnownTransaction = true;
-          txHash = "0x" + errorMessage?.split('known transaction: ')[1];
-          console.log('Request ID:'+ uniqueId + ' - Extracted txHash from known transaction: ', txHash);
-          break;
-        }
+        // Log the RPC error with full details (including RPC URL for debugging)
+        console.error('Request ID:'+ uniqueId + ' - [' + sendCnt + ' try] Transaction send failed: sender - ' + sender + ', contract - ' + targetContract);
+        console.error('Request ID:'+ uniqueId + ' - Send Error:', e?.error?.message || e?.message || e);
+        errorMessage = getCleanErrorMessage(e);
+        // Ignore known transaction errors as requested - skip this check entirely
       }
       sendCnt++;
     } while (sendCnt < 5);
 
     if (!txHash) {
       console.error('Request ID:'+ uniqueId + ' - Sending transaction was failed after 5 try, network is busy. Error message: ' + errorMessage);
-      return createResponse(res, 'INTERNAL_ERROR', 'Sending transaction was failed after 5 try, network is busy. Error message: ' + errorMessage);
+      return createResponse(res, 'INTERNAL_ERROR', `Sending transaction was failed after 5 try, network is busy. Error message: ${sanitizeErrorMessage(errorMessage)}`, uniqueId);
     }
 
     let receipt;
@@ -224,7 +231,7 @@ router.post('/', async (req, res) => {
           break;
         }
       } catch (e) {
-        console.error('Request ID:'+ uniqueId + ' - Error getting transaction receipt for txHash: ' + txHash + ' : ' + JSON.stringify(e));
+        logError(e, uniqueId, 'Getting transaction receipt failed');
       }
 
       waitCnt++;
@@ -232,37 +239,28 @@ router.post('/', async (req, res) => {
 
     if (!receipt) {
       console.error('Request ID:'+ uniqueId + ' - Transaction was failed');
-      return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed');
+      return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed', uniqueId);
     }
 
     try {
-      if(!isKnownTransaction) {
-        console.log('Request ID:'+ uniqueId + ' - Settlement started');
-        await settlement(dapp, receipt);
-      }
+      console.log('Request ID:'+ uniqueId + ' - Settlement started');
+      await settlement(dapp, receipt);
     } catch (error) {
-      console.error('Request ID:'+ uniqueId + ' - Error Settlement: ' + txHash + ' : ' + JSON.stringify(error));
-      return createResponse(res, 'INTERNAL_ERROR', JSON.stringify(error));
+      logError(error, uniqueId, 'Settlement failed');
+      return createResponse(res, 'INTERNAL_ERROR', `Settlement failed: ${getCleanErrorMessage(error)}`, uniqueId);
     }
 
     if (receipt.status === 0) {
       console.error('Request ID:'+ uniqueId + ' - [REVERTED] Transaction hash: ', txHash);
-      return createResponse(res, 'REVERTED', receipt);
+      return createResponse(res, 'REVERTED', receipt, uniqueId);
     }
 
     console.info('Request ID:'+ uniqueId + ' - [SUCCESS] Transaction hash: ', txHash);
-    return createResponse(res, 'SUCCESS', receipt);
+    return createResponse(res, 'SUCCESS', receipt, uniqueId);
   } catch (error) {
-    const errorMsg = JSON.parse(JSON.stringify(error));
-    console.error('Request ID:'+ uniqueId + ' - ' + JSON.stringify(errorMsg));
-
-    const returnErrorMsg = (errorMsg && errorMsg.error && errorMsg.error.message) || errorMsg?.shortMessage;
-    if (!returnErrorMsg) {
-      console.error('Request ID:'+ uniqueId + ' - Error message is empty', JSON.stringify(error));
-      return createResponse(res, 'INTERNAL_ERROR', JSON.stringify(errorMsg));
-    }
-
-    return createResponse(res, 'INTERNAL_ERROR', returnErrorMsg);
+    // Log the main error cleanly
+    logError(error, uniqueId, 'Main request processing failed');
+    return createResponse(res, 'INTERNAL_ERROR', getCleanErrorMessage(error), uniqueId);
   }
 });
 

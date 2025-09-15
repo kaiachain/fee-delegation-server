@@ -17,15 +17,72 @@ const RESPONSE_MAP = {
   UNAUTHORIZED: { message: "Unauthorized access", status: 401 },
 };
 
-const createResponse = (res, type, data) => {
+const createResponse = (res, type, data, requestId = null) => {
   const { message, status } = RESPONSE_MAP[type];
   const payload = {
     message,
     data,
     error: type !== "SUCCESS" ? type : undefined,
-    status: type === "SUCCESS"
+    status: type === "SUCCESS",
+    requestId: requestId || undefined
   };
   return res.status(status).json(payload);
+};
+
+// Helper function to sanitize error messages by removing RPC URLs
+const sanitizeErrorMessage = (errorMessage, requestId = null) => {
+  if (!errorMessage) return errorMessage;
+  
+  // Remove RPC URLs from error messages for client responses
+  const sanitized = errorMessage
+    .replace(/https?:\/\/[^\s,}"]+/g, '[RPC_URL_HIDDEN]')
+    .replace(/"requestUrl"\s*:\s*"[^"]+"/g, '"requestUrl": "[RPC_URL_HIDDEN]"')
+    .replace(/requestUrl[^,}]+/g, 'requestUrl: "[RPC_URL_HIDDEN]"');
+    
+  return sanitized;
+};
+
+// Helper function to log errors cleanly without overwhelming output
+const logError = (error, requestId, context = '') => {
+  if (!error || !requestId) return;
+  
+  const contextStr = context ? ` - ${context}` : '';
+  
+  if (error instanceof Error) {
+    // For Error objects, log the essential info cleanly
+    console.error(`Request ID: ${requestId}${contextStr} - ${error.name}: ${error.message}`);
+    if (error.code) {
+      console.error(`Request ID: ${requestId}${contextStr} - Error code: ${error.code}`);
+    }
+    // Only log stack trace if it's a critical error (not parsing/validation errors)
+    if (context && !context.toLowerCase().includes('parsing') && !context.toLowerCase().includes('validation')) {
+      console.error(`Request ID: ${requestId}${contextStr} - Stack:`, error.stack);
+    }
+  } else if (typeof error === 'string') {
+    console.error(`Request ID: ${requestId}${contextStr} - ${error}`);
+  } else if (typeof error === 'object') {
+    console.error(`Request ID: ${requestId}${contextStr} - Error:`, error);
+  }
+};
+
+// Helper function to get a clean error message for client responses
+const getCleanErrorMessage = (error) => {
+  let message;
+  
+  if (error instanceof Error) {
+    message = error.message;
+  } else if (typeof error === 'string') {
+    message = error;
+  } else if (typeof error === 'object' && error?.message) {
+    message = error.message;
+  } else if (typeof error === 'object' && error?.error?.message) {
+    message = error.error.message;
+  } else {
+    message = 'An unknown error occurred';
+  }
+  
+  // Sanitize the message to remove RPC URLs for client response
+  return sanitizeErrorMessage(message);
 };
 
 const checkWhitelistedContractsWithoutAPIkey = async (address) => {
@@ -574,6 +631,9 @@ const validateEmailAlertAccess = async (emailAlertId, userRole, userEmail) => {
 
 module.exports = {
   createResponse,
+  sanitizeErrorMessage,
+  logError,
+  getCleanErrorMessage,
   checkWhitelistedContractsWithoutAPIkey,
   checkWhitelistedSendersWithoutAPIkey,
   getDappfromContract,
