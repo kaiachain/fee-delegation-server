@@ -51,12 +51,14 @@ router.options('/', async (req, res) => {
  *                   message: "Request was successful"
  *                   data: true
  *                   status: true
+ *                   requestId: "balance123abc456def"
  *               insufficient_balance:
  *                 summary: Insufficient Balance
  *                 value:
  *                   message: "Request was successful"
  *                   data: false
  *                   status: true
+ *                   requestId: "balance456def789abc"
  *       400:
  *         description: Bad request
  *         content:
