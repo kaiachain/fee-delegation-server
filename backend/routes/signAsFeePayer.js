@@ -50,13 +50,14 @@ router.options('/', async (req, res) => {
  *       content:
  *         application/json:
  *           schema:
- *             $ref: '#/components/schemas/FeeDelegationRequest'
- *           examples:
- *             fee_delegated_transfer:
- *               summary: Fee Delegated Value Transfer
- *               value:
- *                 userSignedTx:
- *                   raw: "0x09f8860585066720b300830186a09469209103b24e6272b33051dfb905fd9e9e2265d08711c37937e080009465e9d8b6069eec1ef3b8bfae57326008b7aec2c9f847f8458207f6a0cb70dc0..."
+ *             type: object
+ *             properties:
+ *               userSignedTx:
+ *                 type: object
+ *                 properties:
+ *                   raw:
+ *                     type: string
+ *                     description: User signed RLP encoded transaction
  *     responses:
  *       200:
  *         description: Transaction processed successfully
@@ -72,19 +73,40 @@ router.options('/', async (req, res) => {
  *                 value:
  *                   message: "Request was successful"
  *                   data:
- *                     blockHash: "0x2a7ae196f6e7363fe3cfc79132c1d16292d159e231d73b4308f598a3222d1f57"
- *                     blockNumber: 191523443
+ *                     _type: "TransactionReceipt"
+ *                     blockHash: "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
+ *                     blockNumber: 12345678
+ *                     contractAddress: null
+ *                     cumulativeGasUsed: "21000"
+ *                     from: "0x1234567890123456789012345678901234567890"
+ *                     gasPrice: "25000000000"
+ *                     blobGasUsed: null
+ *                     blobGasPrice: null
+ *                     gasUsed: "21000"
+ *                     hash: "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+ *                     index: 0
+ *                     logs: []
+ *                     logsBloom: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
  *                     status: 1
- *                     hash: "0x0ca73736ceecf2dcf0ec2e1f65760d0b4f7348726cb9a0477710172b1dd44350"
+ *                     to: "0x9876543210987654321098765432109876543210"
  *                   status: true
- *                   requestId: "abc123def456ghi789"
+ *                   requestId: "req123abc456def789"
  *               reverted:
  *                 summary: Transaction Reverted
  *                 value:
  *                   message: "Transaction reverted"
  *                   data:
+ *                     _type: "TransactionReceipt"
+ *                     blockHash: "0xfedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321"
+ *                     blockNumber: 87654321
+ *                     contractAddress: null
+ *                     cumulativeGasUsed: "50000"
+ *                     from: "0x1111111111111111111111111111111111111111"
+ *                     gasPrice: "30000000000"
+ *                     gasUsed: "45000"
+ *                     hash: "0x9999999999999999999999999999999999999999999999999999999999999999"
  *                     status: 0
- *                     hash: "0x0ca73736ceecf2dcf0ec2e1f65760d0b4f7348726cb9a0477710172b1dd44350"
+ *                     to: "0x2222222222222222222222222222222222222222"
  *                   error: "REVERTED"
  *                   status: false
  *                   requestId: "rev456def789abc123"
@@ -99,7 +121,7 @@ router.options('/', async (req, res) => {
  *                 summary: Transaction Parsing Error
  *                 value:
  *                   message: "Bad request"
- *                   data: "Failed to parse transaction: Cannot set field 'from' to invalid address"
+ *                   data: "Failed to parse transaction: Invalid transaction format"
  *                   error: "BAD_REQUEST"
  *                   status: false
  *                   requestId: "parse123error456"
@@ -130,7 +152,7 @@ router.options('/', async (req, res) => {
  *                 summary: RPC Network Error
  *                 value:
  *                   message: "Internal server error"
- *                   data: "Sending transaction was failed after 5 try, network is busy. Error message: server response 401 [RPC_URL_HIDDEN]"
+ *                   data: "Sending transaction was failed after 5 try, network is busy. Error message: Network timeout [RPC_URL_HIDDEN]"
  *                   error: "INTERNAL_ERROR"
  *                   status: false
  *                   requestId: "rpc123network456"
