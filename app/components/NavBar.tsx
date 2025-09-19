@@ -91,7 +91,7 @@ export default function NavBar() {
   // Prevent hydration mismatch by not rendering anything until mounted
   if (!mounted) {
     return (
-      <nav className="bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 shadow-lg fixed top-0 w-screen z-50">
+      <nav className="bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 shadow-lg fixed w-screen z-50" style={{ top: "var(--maintenance-banner-height, 0px)" }}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="h-16 flex items-center justify-between">
             {/* Logo Section */}
@@ -112,7 +112,7 @@ export default function NavBar() {
   }
 
   return (
-    <nav className="bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 shadow-lg fixed top-0 w-screen z-50">
+    <nav className="bg-gradient-to-r from-gray-800 via-gray-900 to-gray-800 shadow-lg fixed w-screen z-50" style={{ top: "var(--maintenance-banner-height, 0px)" }}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="h-16 flex items-center justify-between">
           {/* Logo Section */}
