@@ -38,10 +38,12 @@ jobs:
             API_URL: ${{ vars.MAINNET_API_URL }}
             NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${{ secrets.NEXT_PUBLIC_RECAPTCHA_SITE_KEY }}
             RECAPTCHA_SECRET_KEY: ${{ secrets.RECAPTCHA_SECRET_KEY }}
+            NEXT_PUBLIC_MAINTAINENCE_MSG: ${{ vars.NEXT_PUBLIC_MAINTAINENCE_MSG }}
         run: |
             echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
             echo "NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY" >> .env.production
             echo "RECAPTCHA_SECRET_KEY=$RECAPTCHA_SECRET_KEY" >> .env.production
+            echo "NEXT_PUBLIC_MAINTAINENCE_MSG=$NEXT_PUBLIC_MAINTAINENCE_MSG" >> .env.production
             cat .env.production
             docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
             docker push $ECR_REGISTRY/$ECR_REPOSITORY -a
