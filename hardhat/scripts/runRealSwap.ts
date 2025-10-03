@@ -1,73 +1,409 @@
-import { ethers } from "hardhat";
+import { ethers } from "ethers";
 
-/**
- * Update these values before running the script.
- * Numeric strings must be encoded in wei.
- */
-const config = {
-  executorPrivateKey: "0x4150dca5e411bad248e479922f8b35aa28ad65219185cc471eb51196df5d91b5", // pays gas
-  userPrivateKey: "0x4150dca5e411bad248e479922f8b35aa28ad65219185cc471eb51196df5d91b5", // signs permit (can be different)
-  contractAddress: "0x878c2c46D12ba04B4c6be3a1aAc9CA5dC7D126cD",
-  tokenIn: "0xcb00ba2cab67a3771f9ca1fa48fda8881b457750", // TEST token with permit
-  tokenOut: "0x043c471bEe060e00A56CcD02c0Ca286808a5A436", // WKAIA
-  amountIn: "100000000000000000", // 0.1 TEST (18 decimals)
-  amountOutMin: "1", // adjust to slippage tolerance
+type SwapConfig = {
+  privateKey: string;
+  rpcUrl: string;
+  contractAddress: string;
+  amountInUsdt: string;
+  slippageBps: number;
+  permitDeadlineBufferSeconds: number;
+  permitDomainVersion: string;
+};
+
+const config: SwapConfig = {
+  privateKey: "your_private_key",
+  rpcUrl: "https://public-en-kairos.node.kaia.io",
+  contractAddress: "0x58ECAaE13C4Fc732261fBe50De9d3Aa2591b67E5",
+  amountInUsdt: "0.1",
+  slippageBps: 500, // 5%
   permitDeadlineBufferSeconds: 600,
   permitDomainVersion: "1",
 };
 
-function assertConfigured() {
-  const requiredHex = [
-    config.executorPrivateKey,
-    config.userPrivateKey,
-    config.contractAddress,
-    config.tokenIn,
-    config.tokenOut,
+const erc20MetadataAbi = [
+  "function name() view returns (string)",
+  "function symbol() view returns (string)",
+  "function decimals() view returns (uint8)",
+  "function balanceOf(address) view returns (uint256)",
+  "function nonces(address) view returns (uint256)",
+];
+
+const gaslessSwapAbi = [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "_uniswapRouter",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_usdtToken",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "_wkaiaToken",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "constructor"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "owner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableInvalidOwner",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "account",
+          "type": "address"
+        }
+      ],
+      "name": "OwnableUnauthorizedAccount",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "ReentrancyGuardReentrantCall",
+      "type": "error"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "token",
+          "type": "address"
+        }
+      ],
+      "name": "SafeERC20FailedOperation",
+      "type": "error"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "tokenIn",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "tokenOut",
+          "type": "address"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amountIn",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "uint256",
+          "name": "amountOut",
+          "type": "uint256"
+        },
+        {
+          "indexed": false,
+          "internalType": "address",
+          "name": "executor",
+          "type": "address"
+        }
+      ],
+      "name": "GaslessSwapExecuted",
+      "type": "event"
+    },
+    {
+      "anonymous": false,
+      "inputs": [
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "previousOwner",
+          "type": "address"
+        },
+        {
+          "indexed": true,
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "OwnershipTransferred",
+      "type": "event"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address payable",
+          "name": "recipient",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amount",
+          "type": "uint256"
+        }
+      ],
+      "name": "emergencyRecoverNativeToken",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "tokenIn",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "tokenOut",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amountIn",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amountOutMin",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "deadline",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "v",
+          "type": "uint8"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "r",
+          "type": "bytes32"
+        },
+        {
+          "internalType": "bytes32",
+          "name": "s",
+          "type": "bytes32"
+        }
+      ],
+      "name": "executeSwapWithPermit",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "tokenIn",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "tokenOut",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "amountIn",
+          "type": "uint256"
+        }
+      ],
+      "name": "getExpectedOutput",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "maxUsdtAmount",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "owner",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "renounceOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "newMax",
+          "type": "uint256"
+        }
+      ],
+      "name": "setMaxUsdtAmount",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newRouter",
+          "type": "address"
+        }
+      ],
+      "name": "setRouter",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newUsdt",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "newWkaia",
+          "type": "address"
+        }
+      ],
+      "name": "setTokens",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "newOwner",
+          "type": "address"
+        }
+      ],
+      "name": "transferOwnership",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "uniswapRouter",
+      "outputs": [
+        {
+          "internalType": "contract IUniswapV2Router02",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "usdtToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "wkaiaToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "stateMutability": "payable",
+      "type": "receive"
+    }
   ];
-  if (requiredHex.some((value) => !value || value === ethers.ZeroAddress)) {
-    throw new Error("Ensure private keys and addresses in config are populated.");
-  }
-  if (config.amountIn === "0" || config.amountOutMin === "0") {
-    throw new Error("Set non-zero amountIn and amountOutMin in wei.");
-  }
-}
 
-async function main() {
-  assertConfigured();
-
-  const provider = ethers.provider;
-  const executorWallet = new ethers.Wallet(config.executorPrivateKey, provider);
-  const permitWallet = new ethers.Wallet(config.userPrivateKey, provider);
-
-  const contract = ethers.getAddress(config.contractAddress);
-  const tokenIn = ethers.getAddress(config.tokenIn);
-  const tokenOut = ethers.getAddress(config.tokenOut);
-  const userAddress = await permitWallet.getAddress();
-
-  const amountIn = BigInt(config.amountIn);
-  const amountOutMin = BigInt(config.amountOutMin);
-  const deadline = Math.floor(Date.now() / 1000) + config.permitDeadlineBufferSeconds;
-
-  console.log("Executor:", executorWallet.address);
-  console.log("Permit signer (user):", userAddress);
-
-  const erc20PermitAbi = [
-    "function name() view returns (string)",
-    "function nonces(address owner) view returns (uint256)",
-  ];
-  const permitToken = new ethers.Contract(tokenIn, erc20PermitAbi, permitWallet);
-
-  const [tokenName, nonce, network] = await Promise.all([
-    permitToken.name(),
-    permitToken.nonces(userAddress),
-    provider.getNetwork(),
+async function buildPermitSignature(
+  token: ethers.Contract,
+  owner: ethers.Wallet,
+  spender: string,
+  value: bigint,
+  deadline: number,
+  domainVersion: string
+) {
+  const [name, nonce, network] = await Promise.all([
+    token.name(),
+    token.nonces(await owner.getAddress()),
+    owner.provider!.getNetwork(),
   ]);
 
   const domain = {
-    name: tokenName,
-    version: config.permitDomainVersion,
+    name,
+    version: domainVersion,
     chainId: Number(network.chainId),
-    verifyingContract: tokenIn,
+    verifyingContract: await token.getAddress(),
   };
 
   const types = {
@@ -81,29 +417,85 @@ async function main() {
   };
 
   const message = {
-    owner: userAddress,
-    spender: contract,
-    value: amountIn,
+    owner: await owner.getAddress(),
+    spender,
+    value,
     nonce,
     deadline,
   };
 
-  const signatureBytes = await permitWallet.signTypedData(domain, types, message);
-  const signature = ethers.Signature.from(signatureBytes);
+  const signature = ethers.Signature.from(await owner.signTypedData(domain, types, message));
+  return { signature, nonce };
+}
 
-  console.log("Permit signature:", {
-    v: signature.v,
-    r: signature.r,
-    s: signature.s,
-    nonce: nonce.toString(),
+async function main() {
+  const executorPrivateKey = config.privateKey;
+  const userPrivateKey = process.env.USER_PRIVATE_KEY ?? executorPrivateKey;
+
+  const provider = new ethers.JsonRpcProvider(config.rpcUrl);
+  const executor = new ethers.Wallet(executorPrivateKey, provider);
+  const user = new ethers.Wallet(userPrivateKey, provider);
+
+  const swap = new ethers.Contract(config.contractAddress, gaslessSwapAbi, executor);
+
+  const [usdtAddress, wkaiaAddress, maxUsdtAmount] = await Promise.all([
+    swap.usdtToken(),
+    swap.wkaiaToken(),
+    swap.maxUsdtAmount(),
+  ]);
+
+  const usdtToken = new ethers.Contract(usdtAddress, erc20MetadataAbi, provider);
+  const wkaiaToken = new ethers.Contract(wkaiaAddress, erc20MetadataAbi, provider);
+
+  const [usdtDecimals, wkaiaDecimals, usdtSymbol, wkaiaSymbol] = await Promise.all([
+    usdtToken.decimals(),
+    wkaiaToken.decimals(),
+    usdtToken.symbol(),
+    wkaiaToken.symbol(),
+  ]);
+
+  const amountIn = ethers.parseUnits(config.amountInUsdt, usdtDecimals);
+  if (amountIn > maxUsdtAmount) {
+    throw new Error(
+      `amountIn (${config.amountInUsdt} ${usdtSymbol}) exceeds contract cap ${ethers.formatUnits(maxUsdtAmount, usdtDecimals)} ${usdtSymbol}`
+    );
+  }
+
+  const expectedOut = await swap.getExpectedOutput(usdtAddress, wkaiaAddress, amountIn);
+  const slippageNumerator = BigInt(10_000 - config.slippageBps);
+  const amountOutMin = (expectedOut * slippageNumerator) / 10_000n;
+  if (amountOutMin === 0n) {
+    throw new Error("amountOutMin computed to zero. Increase amount or decrease slippage.");
+  }
+
+  const deadline = Math.floor(Date.now() / 1000) + config.permitDeadlineBufferSeconds;
+  const { signature, nonce } = await buildPermitSignature(
+    usdtToken,
+    user,
+    await swap.getAddress(),
+    amountIn,
     deadline,
-  });
+    config.permitDomainVersion
+  );
 
-  const swap = await ethers.getContractAt("GaslessERC20PermitSwap", contract, executorWallet);
+  const [userBalance, executorBalance] = await Promise.all([
+    usdtToken.balanceOf(await user.getAddress()),
+    provider.getBalance(await executor.getAddress()),
+  ]);
+
+  console.log("Executor:", await executor.getAddress(), "Balance (KAIA):", ethers.formatEther(executorBalance));
+  console.log("User:", await user.getAddress(), `Balance (${usdtSymbol}):`, ethers.formatUnits(userBalance, usdtDecimals));
+  console.log(`Swapping ${ethers.formatUnits(amountIn, usdtDecimals)} ${usdtSymbol}`);
+  console.log("Expected output:", ethers.formatUnits(expectedOut, wkaiaDecimals), wkaiaSymbol);
+  console.log("Minimum output:", ethers.formatUnits(amountOutMin, wkaiaDecimals), wkaiaSymbol);
+  console.log("Permit signature:", { v: signature.v, r: signature.r, s: signature.s, nonce: nonce.toString(), deadline });
+
+  const balanceBefore = await provider.getBalance(await user.getAddress());
+  console.log("Balance before:", ethers.formatEther(balanceBefore));
   const tx = await swap.executeSwapWithPermit(
-    userAddress,
-    tokenIn,
-    tokenOut,
+    await user.getAddress(),
+    usdtAddress,
+    wkaiaAddress,
     amountIn,
     amountOutMin,
     deadline,
@@ -115,6 +507,12 @@ async function main() {
   console.log("Transaction hash:", tx.hash);
   const receipt = await tx.wait();
   console.log("Swap confirmed in block", receipt?.blockNumber);
+  const balanceAfter = await provider.getBalance(await user.getAddress());
+  console.log("Balance after:", ethers.formatEther(balanceAfter));
+  const gasUsed = receipt?.gasUsed;
+  const gasPrice = receipt?.gasPrice;
+  const usedFee = BigInt(gasUsed) * BigInt(gasPrice);
+  console.log("Used fee:", usedFee);
 }
 
 main().catch((error) => {

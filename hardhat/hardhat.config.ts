@@ -1,5 +1,6 @@
 import { HardhatUserConfig } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-verify";
 import "@typechain/hardhat";
 import * as dotenv from "dotenv";
 
@@ -37,6 +38,21 @@ const config: HardhatUserConfig = {
     outDir: "typechain-types",
     target: "ethers-v6",
   },
+  etherscan: {
+    apiKey: {
+      kairos: "unnecessary",
+    },
+    customChains: [
+      {
+        network: "kairos",
+        chainId: 1001,
+        urls: {
+          apiURL: "https://kairos-api.kaiascan.io/hardhat-verify",
+          browserURL: "https://kairos.kaiascan.io",
+        }
+      },
+    ]
+  }
 };
 
 export default config;

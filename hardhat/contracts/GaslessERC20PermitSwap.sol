@@ -2,7 +2,10 @@
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "./interfaces/IWKAIA.sol";
 
 interface IERC20Permit {
     function permit(
@@ -38,8 +41,14 @@ interface IUniswapV2Router02 {
  * @dev Enables 100% gasless token swaps using ERC20Permit signatures
  * @notice Users only need to sign off-chain messages, backend pays all gas
  */
-contract GaslessERC20PermitSwap is ReentrancyGuard {
-    IUniswapV2Router02 public immutable uniswapRouter;
+contract GaslessERC20PermitSwap is ReentrancyGuard, Ownable {
+    using SafeERC20 for IERC20;
+
+    IUniswapV2Router02 public uniswapRouter;
+    address public usdtToken;
+    address public wkaiaToken;
+    uint256 public maxUsdtAmount;
+    mapping(bytes32 => bool) private _consumedPermit;
 
     // Events
     event GaslessSwapExecuted(
@@ -51,22 +60,24 @@ contract GaslessERC20PermitSwap is ReentrancyGuard {
         address executor
     );
 
-    // Custom errors for gas efficiency
-    error PermitExpired();
-    error InvalidTokenPair();
-    error InsufficientOutput();
-    error SwapFailed();
-
-    constructor(address _uniswapRouter) {
+    constructor(address _uniswapRouter, address _usdtToken, address _wkaiaToken) Ownable(msg.sender) {
         require(_uniswapRouter != address(0), "Invalid router");
+        require(_usdtToken != address(0), "Invalid USDT");
+        require(_wkaiaToken != address(0), "Invalid WKAIA");
+
         uniswapRouter = IUniswapV2Router02(_uniswapRouter);
+        usdtToken = _usdtToken;
+        wkaiaToken = _wkaiaToken;
+        maxUsdtAmount = 1_000_000; // 1 USDT with 6 decimals
     }
+
+    receive() external payable {}
 
     /**
      * @dev Execute gasless swap using native ERC20Permit signature
      * @param user Address of token owner who signed the permit
-     * @param tokenIn Address of input token (must be ERC20Permit)
-     * @param tokenOut Address of output token
+     * @param tokenIn Address of input token (must equal predefined USDT)
+     * @param tokenOut Address of output token (must equal predefined WKAIA)
      * @param amountIn Amount of input tokens to swap
      * @param amountOutMin Minimum output tokens expected (slippage protection)
      * @param deadline Permit and swap deadline
@@ -85,57 +96,48 @@ contract GaslessERC20PermitSwap is ReentrancyGuard {
         bytes32 r,
         bytes32 s
     ) external nonReentrant {
-        // Input validation
-        if (block.timestamp > deadline) revert PermitExpired();
-        if (tokenIn == tokenOut) revert InvalidTokenPair();
+        require(block.timestamp <= deadline, "Permit expired");
+        require(tokenIn == usdtToken, "Unsupported input token");
+        require(tokenOut == wkaiaToken, "Unsupported output token");
         require(user != address(0), "Invalid user");
-        require(amountIn > 0, "Invalid amount");
+        require(amountIn > 0 && amountOutMin > 0, "Invalid amount");
+        require(amountIn <= maxUsdtAmount, "Amount exceeds limit");
 
-        // 1. Execute permit - grants allowance via signature (no gas from user)
-        IERC20Permit(tokenIn).permit(
-            user, // Token owner
-            address(this), // Spender (this contract)
-            amountIn, // Amount to approve
-            deadline, // Permit deadline
-            v,
-            r,
-            s // Signature components
-        );
+        bytes32 sigId = keccak256(abi.encode(user, tokenIn, tokenOut, amountIn, amountOutMin, deadline, v, r, s));
+        require(!_consumedPermit[sigId], "Permit already used");
+        _consumedPermit[sigId] = true;
 
-        // 2. Transfer tokens from user to this contract
-        IERC20(tokenIn).transferFrom(user, address(this), amountIn);
-
-        // 3. Approve Uniswap router
-        IERC20(tokenIn).approve(address(uniswapRouter), amountIn);
-
-        // 4. Execute swap
         address[] memory path = new address[](2);
-        path[0] = tokenIn;
-        path[1] = tokenOut;
+        path[0] = usdtToken;
+        path[1] = wkaiaToken;
 
-        // Verify expected output meets minimum requirement
         uint256[] memory expectedAmounts = uniswapRouter.getAmountsOut(amountIn, path);
-        if (expectedAmounts[1] < amountOutMin) revert InsufficientOutput();
+        require(expectedAmounts[1] >= amountOutMin, "Insufficient quote");
 
-        // Execute swap - output tokens sent directly to user
+        IERC20Permit(tokenIn).permit(user, address(this), amountIn, deadline, v, r, s);
+
+        IERC20(tokenIn).safeTransferFrom(user, address(this), amountIn);
+
+        IERC20(tokenIn).forceApprove(address(uniswapRouter), amountIn);
+
+        uint256 wkaiaBalanceBefore = IERC20(wkaiaToken).balanceOf(address(this));
         uint256[] memory amounts = uniswapRouter.swapExactTokensForTokens(
             amountIn,
             amountOutMin,
             path,
-            user, // Recipient is the user
+            address(this),
             deadline
         );
 
-        if (amounts.length < 2 || amounts[amounts.length - 1] < amountOutMin) revert SwapFailed();
+        uint256 wkaiaReceived = IERC20(wkaiaToken).balanceOf(address(this)) - wkaiaBalanceBefore;
+        require(amounts.length >= 2 && wkaiaReceived >= amountOutMin, "Swap failed");
 
-        emit GaslessSwapExecuted(
-            user,
-            tokenIn,
-            tokenOut,
-            amountIn,
-            amounts[amounts.length - 1],
-            msg.sender // Backend executor
-        );
+        IWKAIA(wkaiaToken).withdraw(wkaiaReceived);
+
+        (bool success, ) = payable(user).call{value: wkaiaReceived}("");
+        require(success, "Native transfer failed");
+
+        emit GaslessSwapExecuted(user, tokenIn, tokenOut, amountIn, wkaiaReceived, msg.sender);
     }
 
     /**
@@ -150,12 +152,44 @@ contract GaslessERC20PermitSwap is ReentrancyGuard {
         address tokenOut,
         uint256 amountIn
     ) external view returns (uint256) {
+        require(tokenIn == usdtToken && tokenOut == wkaiaToken, "Invalid pair");
+
         address[] memory path = new address[](2);
         path[0] = tokenIn;
         path[1] = tokenOut;
 
         uint256[] memory amounts = uniswapRouter.getAmountsOut(amountIn, path);
         return amounts[amounts.length - 1];
+    }
+
+    function setRouter(address newRouter) external onlyOwner {
+        require(newRouter != address(0), "Invalid router");
+        uniswapRouter = IUniswapV2Router02(newRouter);
+    }
+
+    function setTokens(address newUsdt, address newWkaia) external onlyOwner {
+        require(newUsdt != address(0), "Invalid USDT");
+        require(newWkaia != address(0), "Invalid WKAIA");
+        usdtToken = newUsdt;
+        wkaiaToken = newWkaia;
+    }
+
+    function setMaxUsdtAmount(uint256 newMax) external onlyOwner {
+        require(newMax > 0, "Invalid amount");
+        maxUsdtAmount = newMax;
+    }
+
+    function emergencyRecoverNativeToken(address payable recipient, uint256 amount) external onlyOwner {
+        require(recipient != address(0), "Invalid recipient");
+        require(amount <= address(this).balance, "Insufficient balance");
+        (bool success, ) = recipient.call{value: amount}("");
+        require(success, "Recovery failed");
+    }
+
+    function emergencyRecoverERC20Token(address token, address recipient, uint256 amount) external onlyOwner {
+        require(token != address(0), "Invalid token");
+        require(recipient != address(0), "Invalid recipient");
+        IERC20(token).safeTransfer(recipient, amount);
     }
 }
 
