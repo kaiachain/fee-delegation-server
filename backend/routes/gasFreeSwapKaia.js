@@ -227,6 +227,12 @@ router.post('/', async (req, res) => {
       return createResponse(res, 'BAD_REQUEST', 'Gas price exceeds maximum limit of 50 gwei, please try again later', requestId);
     }
 
+    const userBalance = await provider.getBalance(user);
+    if (userBalance > 0n) {
+      console.error('Request ID:' + requestId + ' - User has non-zero KAIA balance');
+      return createResponse(res, 'BAD_REQUEST', 'User must have zero KAIA balance to use this feature', requestId);
+    }
+
     let txHash;
     let txResponse;
     let attempt = 0;
