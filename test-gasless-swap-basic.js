@@ -12,7 +12,7 @@ async function fetchJson(url, init) {
 const CONFIG = {
   rpcUrl: process.env.TEST_RPC_URL || 'https://public-en-kairos.node.kaia.io',
   serverUrl: process.env.TEST_SERVER_URL || 'http://localhost:3000',
-  privateKey: process.env.TEST_USER_PRIVATE_KEY || 'private_key',
+  privateKey: process.env.TEST_USER_PRIVATE_KEY || '0x4150dca5e411bad248e479922f8b35aa28ad65219185cc471eb51196df5d91b5',
   contractAddress: (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '0x600476503ce147213f2AA20B3eeFD51c8bf375B6').toLowerCase(),
   tokenIn: (process.env.GASLESS_SWAP_TOKEN_IN || '').toLowerCase(),
   tokenOut: (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCase(),
@@ -127,11 +127,7 @@ async function main() {
       amountOutMin: amountOutMin.toString(),
       deadline: deadline.toString(),
     },
-    permitSignature: {
-      v: signature.v,
-      r: signature.r,
-      s: signature.s,
-    },
+    permitSignature: signature.serialized,
   };
 
 //   console.log('Payload:', JSON.stringify(payload, null, 2));

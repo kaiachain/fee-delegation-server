@@ -51,14 +51,8 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                     type: string
  *                     description: Permit and swap deadline (unix timestamp seconds)
  *               permitSignature:
- *                 type: object
- *                 properties:
- *                   v:
- *                     type: integer
- *                   r:
- *                     type: string
- *                   s:
- *                     type: string
+ *                 type: string
+ *                 description: 65-byte hex signature representing {r, s, v}
  *             required: [swap, permitSignature]
  *     responses:
  *       200:
@@ -141,14 +135,15 @@ router.post('/', async (req, res) => {
       deadline
     } = swap || {};
 
-    const { v, r, s } = permitSignature || {};
-
     if (!user || !tokenIn || !tokenOut || amountIn === undefined || amountOutMin === undefined || deadline === undefined) {
       return createResponse(res, 'BAD_REQUEST', 'Missing required swap fields', requestId);
     }
 
-    if (v === undefined || !r || !s) {
-      return createResponse(res, 'BAD_REQUEST', 'Permit signature is incomplete', requestId);
+    let signature;
+    try {
+      signature = ethers.Signature.from(permitSignature);
+    } catch (sigError) {
+      return createResponse(res, 'BAD_REQUEST', 'Permit signature must be a valid hex string', requestId);
     }
 
     if (!ethers.isAddress(user) || !ethers.isAddress(tokenIn) || !ethers.isAddress(tokenOut)) {
@@ -196,10 +191,7 @@ router.post('/', async (req, res) => {
       return createResponse(res, 'BAD_REQUEST', 'Permit deadline has expired', requestId);
     }
 
-    const vValue = typeof v === 'string' ? Number(v) : v;
-    if (!Number.isInteger(vValue)) {
-      return createResponse(res, 'BAD_REQUEST', 'Signature v must be an integer', requestId);
-    }
+    const vValue = signature.v;
 
     const adminAddress = process.env.ACCOUNT_ADDRESS || '';
     const adminPrivateKey = process.env.FEE_PAYER_PRIVATE_KEY;
@@ -250,8 +242,8 @@ router.post('/', async (req, res) => {
             amountOutMinValue,
             deadlineValue,
             vValue,
-            r,
-            s,
+            signature.r,
+            signature.s,
           ]),
           value: 0n,
           gasPrice: currentGasPrice ?? undefined,
