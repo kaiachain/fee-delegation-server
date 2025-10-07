@@ -2,6 +2,10 @@
 
 # dependencies
 /node_modules
+/hardhat/node_modules
+/hardhat/cache
+/hardhat/artifacts
+/hardhat/typechain-types
 /.pnp
 .pnp.*
 .yarn/*
