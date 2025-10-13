@@ -5,6 +5,9 @@ import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol";
 import "../interfaces/IWKAIA.sol";
 
 contract MockWKAIA is ERC20Permit, IWKAIA {
+    bool public forceIncorrectWithdraw;
+    uint256 public withdrawMultiplierBps = 10_000;
+
     constructor() ERC20("Wrapped KAIA", "WKAIA") ERC20Permit("Wrapped KAIA") {}
 
     receive() external payable {}
@@ -23,11 +26,25 @@ contract MockWKAIA is ERC20Permit, IWKAIA {
 
     function withdraw(uint256 amount) external override {
         _burn(msg.sender, amount);
-        (bool success, ) = payable(msg.sender).call{value: amount}("");
+
+        uint256 payout = amount;
+        if (forceIncorrectWithdraw) {
+            payout = (amount * withdrawMultiplierBps) / 10_000;
+        }
+
+        (bool success, ) = payable(msg.sender).call{value: payout}("");
         require(success, "MockWKAIA: withdraw failed");
     }
 
     function testMint(address to, uint256 amount) external {
         _mint(to, amount);
+    }
+
+    function setForceIncorrectWithdraw(bool value) external {
+        forceIncorrectWithdraw = value;
+    }
+
+    function setWithdrawMultiplierBps(uint256 value) external {
+        withdrawMultiplierBps = value;
     }
 }

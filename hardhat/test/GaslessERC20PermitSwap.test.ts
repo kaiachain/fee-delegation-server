@@ -147,6 +147,37 @@ describe("GaslessERC20PermitSwap", function () {
   });
 
   describe("executeSwapWithPermit negative cases", function () {
+    it("reverts while paused", async function () {
+      const { swap, usdt, wkaia, user, executor, deployer } = await loadFixture(deployFixture);
+      const amountIn = ethers.parseUnits("0.1", 6);
+      const deadline = (await time.latest()) + 1000;
+      const signature = await getPermitSignature({
+        token: usdt,
+        owner: user,
+        spender: await swap.getAddress(),
+        value: amountIn,
+        deadline,
+      });
+
+      await swap.connect(deployer).pause();
+
+      await expect(
+        swap
+          .connect(executor)
+          .executeSwapWithPermit(
+            user.address,
+            await usdt.getAddress(),
+            await wkaia.getAddress(),
+            amountIn,
+            ethers.parseUnits("90", 18),
+            deadline,
+            signature.v,
+            signature.r,
+            signature.s
+          )
+      ).to.be.revertedWithCustomError(swap, "EnforcedPause");
+    });
+
     it("reverts if tokenIn mismatch", async function () {
       const { swap, router, wkaia, user } = await loadFixture(deployFixture);
       await router.setShouldRevert(false);
@@ -393,7 +424,7 @@ describe("GaslessERC20PermitSwap", function () {
             signature.r,
             signature.s
           )
-      ).to.be.revertedWith("Permit already used");
+      ).to.be.revertedWithCustomError(usdt, "ERC2612InvalidSigner");
     });
 
     it("reverts when permit allowance is lower than amountIn", async function () {
@@ -429,6 +460,38 @@ describe("GaslessERC20PermitSwap", function () {
   });
 
   describe("executeSwapWithPermit success path", function () {
+    it("reverts if wrapped token unwrap is inconsistent", async function () {
+      const { swap, router, usdt, wkaia, user, executor, deployer } = await loadFixture(deployFixture);
+      await wkaia.connect(deployer).setForceIncorrectWithdraw(true);
+      await wkaia.connect(deployer).setWithdrawMultiplierBps(9_000);
+
+      const amountIn = ethers.parseUnits("0.1", 6);
+      const deadline = (await time.latest()) + 1000;
+      const signature = await getPermitSignature({
+        token: usdt,
+        owner: user,
+        spender: await swap.getAddress(),
+        value: amountIn,
+        deadline,
+      });
+
+      await expect(
+        swap
+          .connect(executor)
+          .executeSwapWithPermit(
+            user.address,
+            await usdt.getAddress(),
+            await wkaia.getAddress(),
+            amountIn,
+            ethers.parseUnits("90", 18),
+            deadline,
+            signature.v,
+            signature.r,
+            signature.s
+          )
+      ).to.be.revertedWith("Withdraw mismatch");
+    });
+
     it("swaps USDT to native KAIA and sends to user", async function () {
       const { swap, router, usdt, wkaia, user, executor } = await loadFixture(deployFixture);
       const amountIn = ethers.parseUnits("0.1", 6);
@@ -471,6 +534,7 @@ describe("GaslessERC20PermitSwap", function () {
 
       const userBalanceAfter = await ethers.provider.getBalance(user.address);
       expect(userBalanceAfter - userBalanceBefore).to.equal(ethers.parseUnits("100", 18));
+      expect(await usdt.allowance(await swap.getAddress(), await router.getAddress())).to.equal(0n);
       expect(await wkaia.balanceOf(user.address)).to.equal(0);
       expect(await usdt.balanceOf(user.address)).to.equal(ethers.parseUnits("999.9", 6));
       expect(await usdt.allowance(user.address, await swap.getAddress())).to.equal(0n);
@@ -520,6 +584,7 @@ describe("GaslessERC20PermitSwap", function () {
 
       const userBalanceAfter = await ethers.provider.getBalance(user.address);
       expect(userBalanceAfter - userBalanceBefore).to.equal(ethers.parseUnits("100", 18));
+      expect(await usdt.allowance(await swap.getAddress(), await router.getAddress())).to.equal(0n);
       expect(await wkaia.balanceOf(user.address)).to.equal(0);
       expect(await usdt.balanceOf(user.address)).to.equal(ethers.parseUnits("999.9", 6));
       expect(await usdt.allowance(user.address, await swap.getAddress())).to.equal(0n);
@@ -564,7 +629,10 @@ describe("GaslessERC20PermitSwap", function () {
       const { swap, deployer, usdt, wkaia } = await loadFixture(deployFixture);
       const MockRouter = await ethers.getContractFactory("MockRouter");
       const newRouter = await MockRouter.deploy(ethers.parseUnits("100", 18), await usdt.getAddress(), await wkaia.getAddress());
-      await swap.connect(deployer).setRouter(await newRouter.getAddress());
+      const previousRouter = await swap.uniswapRouter();
+      await expect(swap.connect(deployer).setRouter(await newRouter.getAddress()))
+        .to.emit(swap, "RouterUpdated")
+        .withArgs(previousRouter, await newRouter.getAddress());
       expect(await swap.uniswapRouter()).to.equal(await newRouter.getAddress());
     });
 
@@ -584,7 +652,11 @@ describe("GaslessERC20PermitSwap", function () {
       const newUsdt = await MockUSDT.deploy();
       const MockWKAIA = await ethers.getContractFactory("MockWKAIA");
       const newWkaia = await MockWKAIA.deploy();
-      await swap.connect(deployer).setTokens(await newUsdt.getAddress(), await newWkaia.getAddress());
+      const previousUsdt = await swap.usdtToken();
+      const previousWkaia = await swap.wkaiaToken();
+      await expect(swap.connect(deployer).setTokens(await newUsdt.getAddress(), await newWkaia.getAddress()))
+        .to.emit(swap, "TokensUpdated")
+        .withArgs(previousUsdt, await newUsdt.getAddress(), previousWkaia, await newWkaia.getAddress());
       expect(await swap.usdtToken()).to.equal(await newUsdt.getAddress());
       expect(await swap.wkaiaToken()).to.equal(await newWkaia.getAddress());
     });
@@ -599,7 +671,10 @@ describe("GaslessERC20PermitSwap", function () {
 
     it("allows owner to update max amount", async function () {
       const { swap, deployer } = await loadFixture(deployFixture);
-      await swap.connect(deployer).setMaxUsdtAmount(2_000_000n);
+      const previousMax = await swap.maxUsdtAmount();
+      await expect(swap.connect(deployer).setMaxUsdtAmount(2_000_000n))
+        .to.emit(swap, "MaxAmountUpdated")
+        .withArgs(previousMax, 2_000_000n);
       expect(await swap.maxUsdtAmount()).to.equal(2_000_000n);
     });
 
