@@ -21,6 +21,7 @@ model DApp {
   apiKeys         ApiKey[]
   emailAlerts     EmailAlert[]
   userAccess      UserDappAccess[]
+  contractUsages  ContractUsage[]
 }
 
 model ApiKey {
@@ -83,6 +84,37 @@ model EmailAlertLog {
   isRead    Boolean  @default(false)
 
   @@index([dappId], map: "EmailAlertLog_dappId_fkey")
+}
+
+model ContractUsage {
+  id              String   @id @default(cuid())
+  dapp            DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId          String
+  contractAddress String
+  totalUsed       BigInt   @default(0)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([dappId, contractAddress])
+  @@index([dappId])
+}
+
+model TransactionLog {
+  id              String   @id @default(cuid())
+  dapp            DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
+  dappId          String
+  contractAddress String
+  senderAddress   String
+  usedFee         BigInt
+  gasUsed         BigInt
+  gasPrice        BigInt
+  txHash          String   @unique
+  blockNumber     BigInt
+  createdAt       DateTime @default(now())
+
+  @@index([dappId, createdAt])
+  @@index([contractAddress, createdAt])
+  @@index([senderAddress, createdAt])
 }
 
 enum UserRole {

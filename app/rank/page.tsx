@@ -3,34 +3,62 @@
 import React, { useEffect, useState } from "react";
 import { fetchPublicData } from "@/lib/apiUtils";
 import { formatBalance } from "@/lib/balanceUtils";
+import { ContractUsage } from "../types";
+import ContractUsageTable from "../components/ContractUsageTable";
 
 export default function Page() {
   const [dapps, setDapps] = useState<any[]>([]);
-
-  const getDapps = async () => {
-    try {
-      const result = await fetchPublicData("/dapps", { method: "GET" });
-      if (!result.status) {
-        console.error("Failed to fetch DApps:", result.message);
-        return [];
-      }
-      return result.data;
-    } catch (error) {
-      console.error("Error fetching DApps:", error);
-      return [];
-    }
-  };
+  const [expandedDappId, setExpandedDappId] = useState<string | null>(null);
+  const [usageMap, setUsageMap] = useState<Record<string, ContractUsage[]>>({});
 
   useEffect(() => {
-    getDapps().then((dapps) => {
-      if (Array.isArray(dapps)) {
-        setDapps(dapps);
-      } else {
-        console.error("Invalid DApps data received:", dapps);
+    const fetchDapps = async () => {
+      try {
+        const result = await fetchPublicData("/dapps?usageSummary=true", { method: "GET" });
+        if (!result.status) {
+          console.error("Failed to fetch DApps:", result.message);
+          setDapps([]);
+          return;
+        }
+
+        if (Array.isArray(result.data)) {
+          setDapps(result.data);
+
+          const usageSeed: Record<string, ContractUsage[]> = {};
+          result.data.forEach((dapp: any) => {
+            if (Array.isArray(dapp.contractUsages) && dapp.contractUsages.length > 0 && dapp.id) {
+              usageSeed[dapp.id] = dapp.contractUsages.map((entry: ContractUsage) => ({
+                contractAddress: entry.contractAddress,
+                totalUsed: entry.totalUsed,
+                updatedAt: entry.updatedAt,
+              }));
+            }
+          });
+
+          setUsageMap(usageSeed);
+        } else {
+          console.error("Invalid DApps data received:", result.data);
+          setDapps([]);
+        }
+      } catch (error) {
+        console.error("Error fetching DApps:", error);
         setDapps([]);
       }
-    });
+    };
+
+    fetchDapps();
   }, []);
+
+  const toggleExpanded = async (dappId: string, hasUsageSummary: boolean) => {
+    if (expandedDappId === dappId) {
+      setExpandedDappId(null);
+      return;
+    }
+
+    setExpandedDappId(dappId);
+
+    // All contract usages provided by /dapps?usageSummary=true; no additional fetch needed
+  };
 
   const convertTime = (time: string) => {
     if (!time) return "Not set";
@@ -110,50 +138,96 @@ export default function Page() {
                   <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">
                     Created At
                   </th>
+                  <th scope="col" className="px-6 py-4 text-right text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                    {/* Toggle */}
+                  </th>
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {dapps
+                  .slice()
                   .sort((a, b) => b.totalUsed - a.totalUsed)
-                  .map((dapp, idx) => (
-                    <tr key={idx} className="hover:bg-gray-50 transition-all duration-200">
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="flex items-center">
-                          <div className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center
-                            ${idx === 0 ? 'bg-yellow-100 text-yellow-800' :
-                              idx === 1 ? 'bg-gray-100 text-gray-800' :
-                              idx === 2 ? 'bg-orange-100 text-orange-800' :
-                              'bg-gray-50 text-gray-600'}`}>
-                            <span className="text-sm font-medium">#{idx + 1}</span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm font-medium text-gray-900">{dapp.name}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <a
-                          href={dapp.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-indigo-600 hover:text-indigo-900 hover:underline"
+                  .map((dapp, idx) => {
+                    const dappId: string = dapp.id ?? `dapp-${idx}`;
+                    const isExpanded = expandedDappId === dappId;
+                    const entries = usageMap[dappId] || [];
+
+                    return (
+                      <React.Fragment key={dappId}>
+                        <tr
+                          className={`transition-all duration-200 ${
+                            isExpanded ? "bg-indigo-50/40" : "hover:bg-gray-50"
+                          }`}
                         >
-                          {dapp.url}
-                        </a>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{formatBalance(dapp.totalUsed)}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-900">{formatBalance(dapp.balance)}</div>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="text-sm text-gray-500">
-                          {convertTime(dapp.createdAt)}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="flex items-center">
+                              <div
+                                className={`flex-shrink-0 h-8 w-8 rounded-full flex items-center justify-center ${
+                                  idx === 0
+                                    ? "bg-yellow-100 text-yellow-800"
+                                    : idx === 1
+                                    ? "bg-gray-100 text-gray-800"
+                                    : idx === 2
+                                    ? "bg-orange-100 text-orange-800"
+                                    : "bg-gray-50 text-gray-600"
+                                }`}
+                              >
+                                <span className="text-sm font-medium">#{idx + 1}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm font-medium text-gray-900">{dapp.name}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <a
+                              href={dapp.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-sm text-indigo-600 hover:text-indigo-900 hover:underline"
+                            >
+                              {dapp.url}
+                            </a>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{formatBalance(dapp.totalUsed)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-900">{formatBalance(dapp.balance)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <div className="text-sm text-gray-500">{convertTime(dapp.createdAt)}</div>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                            <button
+                              type="button"
+                              onClick={() => toggleExpanded(dappId, Array.isArray(dapp.contractUsages) && dapp.contractUsages.length > 0)}
+                              className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                              title="Toggle contract usage"
+                            >
+                              <svg
+                                className={`h-5 w-5 text-indigo-600 transform transition-transform ${
+                                  isExpanded ? "rotate-180" : ""
+                                }`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                        {isExpanded && (
+                          <tr className="bg-indigo-50/30">
+                            <td colSpan={7} className="px-6 py-4">
+                              <ContractUsageTable usages={entries} title="Contract Usage" highlightColor="indigo" />
+                            </td>
+                          </tr>
+                        )}
+                      </React.Fragment>
+                    );
+                  })}
               </tbody>
             </table>
           </div>

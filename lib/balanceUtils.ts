@@ -39,6 +39,14 @@ export const formatBalanceForDisplay = (balance: string | number): string => {
   return formatBalance(balance);
 };
 
+export const truncateAddress = (address: string, lead = 6, tail = 4) => {
+  if (!address) return "-";
+  if (address.length <= lead + tail) {
+    return address;
+  }
+  return `${address.slice(0, lead)}...${address.slice(-tail)}`;
+};
+
 /**
  * Formats multiple balances in a DApp object
  * @param dapp - DApp object with balance and totalUsed fields
