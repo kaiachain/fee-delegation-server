@@ -4,6 +4,8 @@ import React from "react";
 import { ContractUsage } from "../types";
 import { formatBalance, truncateAddress } from "@/lib/balanceUtils";
 
+const CONTRACT_USAGE_START_DATE = process.env.NEXT_PUBLIC_CONTRACT_USAGE_START_DATE || "20/10/25";
+
 interface ContractUsageTableProps {
   usages: ContractUsage[];
   title?: string;
@@ -63,7 +65,7 @@ const ContractUsageTable: React.FC<ContractUsageTableProps> = ({ usages, title, 
         </div>
         <div className="flex flex-col items-end text-xs">
           <div className={`${colors.accent}`}>
-            Total recorded contract usage (starting from 20/10/25): <span className="font-semibold">{formatBalance(total.toString())} KAIA</span>
+            Total recorded contract usage (starting from {CONTRACT_USAGE_START_DATE}): <span className="font-semibold">{formatBalance(total.toString())} KAIA</span>
           </div>
           <div className="text-gray-500">Showing {sorted.length} contracts sorted by usage</div>
         </div>
