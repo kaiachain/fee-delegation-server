@@ -333,7 +333,7 @@ router.post('/', async (req, res) => {
     let waitCnt = 0;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('Request ID:'+ uniqueId + ' - waiting for receipt', waitCnt);
+      console.log('Request ID:'+ uniqueId + ' - waiting for signAsFeePayer receipt', waitCnt);
       try {
         receipt = await provider.getTransactionReceipt(txHash);
         if (receipt) {
