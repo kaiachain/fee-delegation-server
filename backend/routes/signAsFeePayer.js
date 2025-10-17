@@ -10,7 +10,6 @@ const {
   getCleanErrorMessage,
   checkWhitelistedAndGetDapp,
   isEnoughBalance,
-  updateDappWithFee,
   validateSwapTransaction,
   getDappByApiKey,
 } = require('../utils/apiUtils');
@@ -333,7 +332,7 @@ router.post('/', async (req, res) => {
     let waitCnt = 0;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('Request ID:'+ uniqueId + ' - waiting for receipt', waitCnt);
+      console.log('Request ID:'+ uniqueId + ' - waiting for signAsFeePayer receipt', waitCnt);
       try {
         receipt = await provider.getTransactionReceipt(txHash);
         if (receipt) {
@@ -353,7 +352,9 @@ router.post('/', async (req, res) => {
 
     try {
       console.log('Request ID:'+ uniqueId + ' - Settlement started');
-      await settlement(dapp, receipt);
+      const targetContract = (receipt.to || tx.to || '').toLowerCase();
+      const sender = (receipt.from || tx.from || '').toLowerCase();
+      await settlement({ dapp, receipt, targetContract, sender, txHash });
     } catch (error) {
       logError(error, uniqueId, 'Settlement failed');
       return createResponse(res, 'INTERNAL_ERROR', `Settlement failed: ${getCleanErrorMessage(error)}`, uniqueId);
@@ -373,77 +374,147 @@ router.post('/', async (req, res) => {
   }
 });
 
-async function settlement(dapp, receipt) {
-  if (process.env.NETWORK === 'mainnet') {
-    if (dapp) {
-      const gasPriceValue = receipt?.gasPrice ?? receipt?.effectiveGasPrice;
-      if (receipt?.gasUsed !== undefined && gasPriceValue !== undefined) {
-        const gasUsed = typeof receipt.gasUsed === 'bigint' ? receipt.gasUsed : BigInt(receipt.gasUsed);
-        const gasPrice = typeof gasPriceValue === 'bigint' ? gasPriceValue : BigInt(gasPriceValue);
-        const usedFee = gasUsed * gasPrice;
-        await updateDappWithFee(dapp, usedFee);
+async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
+  if (process.env.NETWORK !== 'mainnet') {
+    return;
+  }
 
-        // Get updated DApp with email alerts
-        const updatedDapp = await prisma.dApp.findUnique({
-          where: { id: dapp.id },
-          include: {
-            emailAlerts: {
-              where: { isActive: true },
-            },
-          },
-        });
+  if (!dapp) {
+    throw new Error('Settlement failed');
+  }
 
-        if (updatedDapp) {
-          const newBalance = BigInt(updatedDapp.balance);
+  const gasPriceValue = receipt?.gasPrice ?? receipt?.effectiveGasPrice;
+  if (receipt?.gasUsed === undefined || gasPriceValue === undefined) {
+    throw new Error('field missing in receipt:' + JSON.stringify(receipt));
+  }
 
-          // Check each email alert threshold
-          for (const alert of updatedDapp.emailAlerts) {
-            const threshold = BigInt(alert.balanceThreshold);
-            // If balance is now below threshold
-            if (newBalance < threshold) {
-              try {
-                // Send email alert
-                const emailResult = await sendBalanceAlertEmail({
-                  email: alert.email,
-                  dappName: updatedDapp.name,
-                  newBalance: newBalance.toString(),
-                  threshold: threshold.toString(),
-                });
+  const gasUsed = typeof receipt.gasUsed === 'bigint' ? receipt.gasUsed : BigInt(receipt.gasUsed);
+  const gasPrice = typeof gasPriceValue === 'bigint' ? gasPriceValue : BigInt(gasPriceValue);
+  const usedFee = gasUsed * gasPrice;
 
-                if (emailResult.success) {
-                  // Log the email alert
-                  await prisma.emailAlertLog.create({
-                    data: {
-                      email: alert.email,
-                      dappId: updatedDapp.id,
-                      dappName: updatedDapp.name,
-                      newBalance: newBalance.toString(),
-                      threshold: threshold.toString(),
-                    },
-                  });
+  const contractAddressForLog = targetContract || sender;
+  let nextBalance;
+  let nextTotalUsed;
 
-                  // Disable the alert after sending
-                  await prisma.emailAlert.update({
-                    where: { id: alert.id },
-                    data: { isActive: false },
-                  });
+  await prisma.$transaction(async (tx) => {
+    const currentSnapshot = await tx.dApp.findUnique({
+      where: { id: dapp.id },
+      select: {
+        balance: true,
+        totalUsed: true,
+      },
+    });
 
-                  console.log(`Email alert sent to ${alert.email} for DApp ${updatedDapp.name}`);
-                } else {
-                  console.error(`Failed to send email alert to ${alert.email}:`, emailResult.error);
-                }
-              } catch (error) {
-                console.error(`Error sending email alert to ${alert.email}:`, error);
-              }
-            }
-          }
-        }
-      } else {
-        throw new Error('field missing in receipt:' + JSON.stringify(receipt));
-      }
-    } else {
-      throw new Error('Settlement failed');
+    if (!currentSnapshot) {
+      throw new Error(`DApp ${dapp.id} not found during settlement`);
     }
+
+    nextBalance = (BigInt(currentSnapshot.balance) - usedFee).toString();
+    nextTotalUsed = (BigInt(currentSnapshot.totalUsed) + usedFee).toString();
+
+    await tx.dApp.update({
+      where: { id: dapp.id },
+      data: {
+        balance: nextBalance,
+        totalUsed: nextTotalUsed,
+      },
+    });
+
+    if (targetContract) {
+      await tx.contractUsage.upsert({
+        where: {
+          dappId_contractAddress: {
+            dappId: dapp.id,
+            contractAddress: targetContract,
+          },
+        },
+        update: {
+          totalUsed: { increment: usedFee },
+        },
+        create: {
+          dappId: dapp.id,
+          contractAddress: targetContract,
+          totalUsed: usedFee,
+        },
+      });
+    }
+
+    await tx.transactionLog.create({
+      data: {
+        dappId: dapp.id,
+        contractAddress: contractAddressForLog,
+        senderAddress: sender,
+        usedFee,
+        gasUsed,
+        gasPrice,
+        txHash,
+        blockNumber: BigInt(receipt.blockNumber ?? 0),
+      },
+    });
+  });
+
+  // Get updated DApp with email alerts
+  const updatedDapp = await prisma.dApp.findUnique({
+    where: { id: dapp.id },
+    include: {
+      emailAlerts: {
+        where: { isActive: true },
+      },
+    },
+  });
+
+  if (updatedDapp) {
+    const newBalance = BigInt(updatedDapp.balance);
+
+    // Check each email alert threshold
+    for (const alert of updatedDapp.emailAlerts) {
+      const threshold = BigInt(alert.balanceThreshold);
+      // If balance is now below threshold
+      if (newBalance < threshold) {
+        try {
+          // Send email alert
+          const emailResult = await sendBalanceAlertEmail({
+            email: alert.email,
+            dappName: updatedDapp.name,
+            newBalance: newBalance.toString(),
+            threshold: threshold.toString(),
+          });
+
+          if (emailResult.success) {
+            // Log the email alert
+            await prisma.emailAlertLog.create({
+              data: {
+                email: alert.email,
+                dappId: updatedDapp.id,
+                dappName: updatedDapp.name,
+                newBalance: newBalance.toString(),
+                threshold: threshold.toString(),
+              },
+            });
+
+            // Disable the alert after sending
+            await prisma.emailAlert.update({
+              where: { id: alert.id },
+              data: { isActive: false },
+            });
+
+            console.log(`Email alert sent to ${alert.email} for DApp ${updatedDapp.name}`);
+          } else {
+            console.error(`Failed to send email alert to ${alert.email}:`, emailResult.error);
+          }
+        } catch (error) {
+          console.error(`Error sending email alert to ${alert.email}:`, error);
+        }
+      }
+    }
+  }
+
+  // keep local dapp snapshot in sync for downstream logic
+  if (nextBalance !== undefined) {
+    dapp.balance = nextBalance;
+  }
+  if (nextTotalUsed !== undefined) {
+    dapp.totalUsed = nextTotalUsed;
   }
 }
 

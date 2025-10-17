@@ -196,15 +196,6 @@ const isEnoughBalance = (balance) => {
   return balance > parseKaia("0.1") ? true : false;
 };
 
-const updateDappWithFee = async (dapp, fee) => {
-  const balance = BigInt(dapp?.balance) - fee;
-  const totalUsed = BigInt(dapp?.totalUsed) + fee;
-  await prisma.dApp.update({
-    where: { id: dapp.id },
-    data: { balance: balance.toString(), totalUsed: totalUsed.toString() },
-  });
-};
-
 // ABI Definitions for swap validation
 const swapAbi = [
   "function multicall(uint256 deadline, bytes[] data)",
@@ -639,7 +630,7 @@ module.exports = {
   getDappfromContract,
   getDappfromSender,
   isEnoughBalance,
-  updateDappWithFee,
+  // updateDappWithFee,
   validateSwapTransaction,
   checkWhitelistedAndGetDapp,
   checkDappHasApiKeys,

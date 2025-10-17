@@ -2,24 +2,55 @@ const express = require('express');
 const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
-const { createResponse, getCleanErrorMessage, checkContractExistsForNoApiKeyDapps, checkSenderExistsForNoApiKeyDapps } = require('../utils/apiUtils');
+const {
+  createResponse,
+  getCleanErrorMessage,
+  checkContractExistsForNoApiKeyDapps,
+  checkSenderExistsForNoApiKeyDapps,
+} = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
 
 // GET /api/dapps
 router.get('/', async (req, res) => {
   try {
+    const includeUsageSummary = req.query.usageSummary === 'true';
+
+    const select = {
+      id: true,
+      name: true,
+      url: true,
+      balance: true,
+      totalUsed: true,
+      createdAt: true,
+    };
+
+    if (includeUsageSummary) {
+      select.contractUsages = {
+        select: {
+          contractAddress: true,
+          totalUsed: true,
+          updatedAt: true,
+        }
+      };
+    }
+
     const dapps = await prisma.dApp.findMany({
-      select: {
-        name: true,
-        url: true,
-        balance: true,
-        totalUsed: true,
-        createdAt: true
-      }
+      select
     });
     
-    return createResponse(res, "SUCCESS", dapps);
+    const formatted = includeUsageSummary
+      ? dapps.map((dapp) => ({
+          ...dapp,
+          contractUsages: (dapp.contractUsages || []).map((usage) => ({
+            contractAddress: usage.contractAddress,
+            totalUsed: usage.totalUsed.toString(),
+            updatedAt: usage.updatedAt?.toISOString?.() || usage.updatedAt,
+          })),
+        }))
+      : dapps;
+
+    return createResponse(res, "SUCCESS", formatted);
   } catch (error) {
     console.error("Error fetching dapps:", error);
     return createResponse(res, "INTERNAL_ERROR", "Failed to fetch dapps");
@@ -521,6 +552,12 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
             createdAt: true
           }
         },
+        contractUsages: {
+          select: {
+            contractAddress: true,
+            totalUsed: true,
+          }
+        },
         senders: {
           select: {
             id: true,
@@ -576,7 +613,11 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
           ...alert,
           balanceThreshold: alert.balanceThreshold
         })) || [],
-        assignedUsers: dapp.userAccess?.map((access) => access.user) || []
+        assignedUsers: dapp.userAccess?.map((access) => access.user) || [],
+        contractUsages: dapp.contractUsages?.map((usage) => ({
+          contractAddress: usage.contractAddress,
+          totalUsed: usage.totalUsed.toString(),
+        })) || [],
       };
     });
 

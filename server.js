@@ -22,6 +22,7 @@ const emailAlertLogsRoutes = require('./backend/routes/emailAlertLogs');
 const docsRoutes = require('./backend/routes/docs');
 const openapiRoutes = require('./backend/routes/openapi');
 const signAsFeePayerRoutes = require('./backend/routes/signAsFeePayer');
+const gasFreeSwapKaiaRoutes = require('./backend/routes/gasFreeSwapKaia');
 
 app.prepare().then(() => {
   const server = express();
@@ -53,6 +54,14 @@ app.prepare().then(() => {
     next();
   });
 
+  server.use('/api/gasFreeSwapKaia', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+    res.header('Content-Type', 'application/json');
+    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    next();
+  });
+
   server.use('/api/balance', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
@@ -73,6 +82,7 @@ app.prepare().then(() => {
   server.use('/api/docs', docsRoutes);
   server.use('/api/openapi.json', openapiRoutes);
   server.use('/api/signAsFeePayer', signAsFeePayerRoutes);
+  server.use('/api/gasFreeSwapKaia', gasFreeSwapKaiaRoutes);
   // Email auth routes
   server.use('/api/email-auth', require('./backend/routes/emailAuth'));
   server.use('/api/users', require('./backend/routes/users'));

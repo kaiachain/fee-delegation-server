@@ -11,6 +11,7 @@ export interface Dapp {
   senders: Sender[];
   apiKeys: ApiKey[];
   emailAlerts?: EmailAlert[];
+  contractUsages?: ContractUsage[];
 }
 
 export interface Contract {
@@ -55,3 +56,20 @@ export interface EmailAlertLog {
   sentAt: string;
   isRead: boolean;
 } 
+
+export interface ContractUsage {
+  contractAddress: string;
+  totalUsed: string;
+  updatedAt?: string;
+}
+
+export interface TransactionLogEntry {
+  contractAddress: string;
+  senderAddress: string;
+  usedFee: string;
+  gasUsed: string;
+  gasPrice: string;
+  txHash: string;
+  blockNumber: string;
+  createdAt: string;
+}
