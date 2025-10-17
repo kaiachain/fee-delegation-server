@@ -22,6 +22,7 @@ model DApp {
   emailAlerts     EmailAlert[]
   userAccess      UserDappAccess[]
   contractUsages  ContractUsage[]
+  transactionLogs TransactionLog[]
 }
 
 model ApiKey {
