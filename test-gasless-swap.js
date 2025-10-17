@@ -13,7 +13,7 @@ const CONFIG = {
   rpcUrl: process.env.TEST_RPC_URL || 'https://public-en-kairos.node.kaia.io',
   serverUrl: process.env.TEST_SERVER_URL || 'http://localhost:3000',
   privateKey: process.env.TEST_USER_PRIVATE_KEY || '0x4150dca5e411bad248e479922f8b35aa28ad65219185cc471eb51196df5d91b5',
-  contractAddress: (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '0x600476503ce147213f2AA20B3eeFD51c8bf375B6').toLowerCase(),
+  contractAddress: (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '0x5BdfF0c890923F697677f3815A82a0acde0d405E').toLowerCase(),
   tokenIn: (process.env.GASLESS_SWAP_TOKEN_IN || '0xcb00ba2cab67a3771f9ca1fa48fda8881b457750').toLowerCase(),
   tokenOut: (process.env.GASLESS_SWAP_TOKEN_OUT || '0x043c471bee060e00a56ccd02c0ca286808a5a436').toLowerCase(),
   amountIn: process.env.TEST_SWAP_AMOUNT_IN || '0.01',
