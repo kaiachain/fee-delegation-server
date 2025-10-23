@@ -26,6 +26,7 @@ async function deployFixture() {
 
   const Swap = await ethers.getContractFactory("GaslessERC20PermitSwap");
   const swap = (await Swap.deploy(
+    deployer.address,
     await router.getAddress(),
     await usdt.getAddress(),
     await mockWkaia.getAddress()
@@ -108,13 +109,15 @@ describe("GaslessERC20PermitSwap", function () {
       await expect(
         GaslessSwap.deploy(
           ethers.ZeroAddress,
+          ethers.ZeroAddress,
           await mockToken.getAddress(),
           await mockToken.getAddress()
         )
-      ).to.be.revertedWith("Invalid router");
+      ).to.be.revertedWithCustomError(GaslessSwap, "OwnableInvalidOwner");
 
       await expect(
         GaslessSwap.deploy(
+          await mockRouter.getAddress(),
           await mockRouter.getAddress(),
           ethers.ZeroAddress,
           await mockToken.getAddress()
@@ -123,6 +126,7 @@ describe("GaslessERC20PermitSwap", function () {
 
       await expect(
         GaslessSwap.deploy(
+          await mockRouter.getAddress(),
           await mockRouter.getAddress(),
           await mockToken.getAddress(),
           ethers.ZeroAddress
