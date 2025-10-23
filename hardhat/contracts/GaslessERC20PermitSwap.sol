@@ -69,7 +69,10 @@ contract GaslessERC20PermitSwap is ReentrancyGuard, Pausable, Ownable {
     );
     event MaxAmountUpdated(uint256 previousMax, uint256 newMax);
 
-    constructor(address _uniswapRouter, address _usdtToken, address _wkaiaToken) Ownable(msg.sender) {
+    constructor(address initialOwner, address _uniswapRouter, address _usdtToken, address _wkaiaToken)
+        Ownable(initialOwner)
+    {
+        require(initialOwner != address(0), "Invalid owner");
         require(_uniswapRouter != address(0), "Invalid router");
         require(_usdtToken != address(0), "Invalid USDT");
         require(_wkaiaToken != address(0), "Invalid WKAIA");

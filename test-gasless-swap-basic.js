@@ -11,9 +11,10 @@ async function fetchJson(url, init) {
 
 const CONFIG = {
   rpcUrl: process.env.TEST_RPC_URL || 'https://public-en-kairos.node.kaia.io',
-  serverUrl: process.env.TEST_SERVER_URL || 'http://localhost:3000',
-  privateKey: process.env.TEST_USER_PRIVATE_KEY || '0x4150dca5e411bad248e479922f8b35aa28ad65219185cc471eb51196df5d91b5',
-  contractAddress: (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '0x5bdff0c890923f697677f3815a82a0acde0d405e').toLowerCase(),
+  // serverUrl: process.env.TEST_SERVER_URL || 'https://fee-delegation-kairos.kaia.io',
+  serverUrl: "http://localhost:3000",
+  privateKey: process.env.TEST_USER_PRIVATE_KEY || 'your_private_key',
+  contractAddress: (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '0xaaFe47636ACe87E2B8CAaFADb03E87090277Ff7B').toLowerCase(),
   tokenIn: (process.env.GASLESS_SWAP_TOKEN_IN || '').toLowerCase(),
   tokenOut: (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCase(),
   amountIn: process.env.TEST_SWAP_AMOUNT_IN || '0.01',
