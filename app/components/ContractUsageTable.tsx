@@ -4,7 +4,8 @@ import React from "react";
 import { ContractUsage } from "../types";
 import { formatBalance, truncateAddress } from "@/lib/balanceUtils";
 
-const CONTRACT_USAGE_START_DATE = process.env.NEXT_PUBLIC_CONTRACT_USAGE_START_DATE || "20/10/25";
+// const CONTRACT_USAGE_START_DATE = process.env.NEXT_PUBLIC_CONTRACT_USAGE_START_DATE || "Oct 27, 2025, 07:58:55 UTC";
+const CONTRACT_USAGE_START_DATE = "Oct 27, 2025, 07:58:55 UTC";
 
 interface ContractUsageTableProps {
   usages: ContractUsage[];
