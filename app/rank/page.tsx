@@ -2,14 +2,14 @@
 
 import React, { useEffect, useState } from "react";
 import { fetchPublicData } from "@/lib/apiUtils";
-import { formatBalance } from "@/lib/balanceUtils";
-import { ContractUsage } from "../types";
-import ContractUsageTable from "../components/ContractUsageTable";
+import { formatBalance, truncateAddress } from "@/lib/balanceUtils"; // truncateAddress imported
+// import { ContractUsage } from "../types";
+// import ContractUsageTable from "../components/ContractUsageTable"; // New import
 
 export default function Page() {
   const [dapps, setDapps] = useState<any[]>([]);
-  const [expandedDappId, setExpandedDappId] = useState<string | null>(null);
-  const [usageMap, setUsageMap] = useState<Record<string, ContractUsage[]>>({});
+  // const [expandedDappId, setExpandedDappId] = useState<string | null>(null);
+  // const [usageMap, setUsageMap] = useState<Record<string, ContractUsage[]>>({});
 
   useEffect(() => {
     const fetchDapps = async () => {
@@ -23,19 +23,6 @@ export default function Page() {
 
         if (Array.isArray(result.data)) {
           setDapps(result.data);
-
-          const usageSeed: Record<string, ContractUsage[]> = {};
-          result.data.forEach((dapp: any) => {
-            if (Array.isArray(dapp.contractUsages) && dapp.contractUsages.length > 0 && dapp.id) {
-              usageSeed[dapp.id] = dapp.contractUsages.map((entry: ContractUsage) => ({
-                contractAddress: entry.contractAddress,
-                totalUsed: entry.totalUsed,
-                updatedAt: entry.updatedAt,
-              }));
-            }
-          });
-
-          setUsageMap(usageSeed);
         } else {
           console.error("Invalid DApps data received:", result.data);
           setDapps([]);
@@ -49,16 +36,16 @@ export default function Page() {
     fetchDapps();
   }, []);
 
-  const toggleExpanded = async (dappId: string, hasUsageSummary: boolean) => {
-    if (expandedDappId === dappId) {
-      setExpandedDappId(null);
-      return;
-    }
+  // const toggleExpanded = async (dappId: string, hasUsageSummary: boolean) => {
+  //   if (expandedDappId === dappId) {
+  //     setExpandedDappId(null);
+  //     return;
+  //   }
 
-    setExpandedDappId(dappId);
+  //   setExpandedDappId(dappId);
 
-    // All contract usages provided by /dapps?usageSummary=true; no additional fetch needed
-  };
+  //   // All contract usages provided by /dapps?usageSummary=true; no additional fetch needed
+  // };
 
   const convertTime = (time: string) => {
     if (!time) return "Not set";
@@ -149,14 +136,15 @@ export default function Page() {
                   .sort((a, b) => b.totalUsed - a.totalUsed)
                   .map((dapp, idx) => {
                     const dappId: string = dapp.id ?? `dapp-${idx}`;
-                    const isExpanded = expandedDappId === dappId;
-                    const entries = usageMap[dappId] || [];
+                    // const isExpanded = expandedDappId === dappId;
+                    // const entries = usageMap[dappId] || [];
 
                     return (
                       <React.Fragment key={dappId}>
                         <tr
                           className={`transition-all duration-200 ${
-                            isExpanded ? "bg-indigo-50/40" : "hover:bg-gray-50"
+                            // isExpanded ? "bg-indigo-50/40" : "hover:bg-gray-50"
+                            "hover:bg-gray-50"
                           }`}
                         >
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -198,16 +186,17 @@ export default function Page() {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm text-gray-500">{convertTime(dapp.createdAt)}</div>
                           </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-right">
+                          {/* <td className="px-6 py-4 whitespace-nowrap text-right">
                             <button
                               type="button"
-                              onClick={() => toggleExpanded(dappId, Array.isArray(dapp.contractUsages) && dapp.contractUsages.length > 0)}
+                              onClick={() => toggleExpanded(dappId)}
                               className="inline-flex items-center justify-center w-8 h-8 rounded-full hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-500"
                               title="Toggle contract usage"
                             >
                               <svg
                                 className={`h-5 w-5 text-indigo-600 transform transition-transform ${
-                                  isExpanded ? "rotate-180" : ""
+                                  // isExpanded ? "rotate-180" : ""
+                                  ""
                                 }`}
                                 fill="none"
                                 viewBox="0 0 24 24"
@@ -216,15 +205,15 @@ export default function Page() {
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
                               </svg>
                             </button>
-                          </td>
+                          </td> */}
                         </tr>
-                        {isExpanded && (
+                        {/* {isExpanded && (
                           <tr className="bg-indigo-50/30">
                             <td colSpan={7} className="px-6 py-4">
                               <ContractUsageTable usages={entries} title="Contract Usage" highlightColor="indigo" />
                             </td>
                           </tr>
-                        )}
+                        )} */}
                       </React.Fragment>
                     );
                   })}

@@ -304,6 +304,7 @@ router.post('/', async (req, res) => {
       process.env.FEE_PAYER_PRIVATE_KEY || '',
       provider
     );
+    console.info('Request ID:'+ uniqueId + ' - signAsFeePayer using fee payer wallet:', feePayer.address);
 
     const feePayerSignedTx = await feePayer.signTransactionAsFeePayer(tx);
     let txHash;
