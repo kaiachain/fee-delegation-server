@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Wallet } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, TxType } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const { createResponse, sanitizeErrorMessage, logError, getCleanErrorMessage } = require('../utils/apiUtils');
 const { ethers } = require('ethers');
@@ -203,6 +203,7 @@ router.post('/', async (req, res) => {
 
     const provider = pickProviderFromPool();
     const adminWallet = new Wallet(adminAddress, adminPrivateKey, provider);
+    const adminSenderWallet = new Wallet(adminPrivateKey, provider);
 
     let currentGasPrice = null;
     try {
@@ -230,24 +231,41 @@ router.post('/', async (req, res) => {
     let attempt = 0;
     let error = '';
 
+
+    const tx = {
+      type: TxType.FeeDelegatedSmartContractExecution,
+      from: adminSenderWallet.address,
+      to: SWAP_CONTRACT_ADDRESS,
+      data: new ethers.Interface(GASLESS_SWAP_ABI).encodeFunctionData('executeSwapWithPermit', [
+        user,
+        tokenIn,
+        tokenOut,
+        amountInValue,
+        amountOutMinValue,
+        deadlineValue,
+        vValue,
+        signature.r,
+        signature.s,
+      ]),
+      value: BigInt(0),
+      gasPrice: currentGasPrice ?? undefined,
+    };
+
+    const [nonce, gasEstimate] = await Promise.all([
+      adminSenderWallet.getNonce(),
+      adminSenderWallet.estimateGas(tx),
+    ]);
+
+    const gasLimitWithBuffer = ((gasEstimate * 120n) + 99n) / 100n; // add ~20% buffer, round up
+
+    tx.nonce = nonce;
+    tx.gasLimit = gasLimitWithBuffer > gasEstimate ? gasLimitWithBuffer : gasEstimate;
+
+    const senderTxHashRLP = await adminSenderWallet.signTransaction(tx);
+    
     do {
       try {
-        txResponse = await adminWallet.sendTransaction({
-          to: SWAP_CONTRACT_ADDRESS,
-          data: new ethers.Interface(GASLESS_SWAP_ABI).encodeFunctionData('executeSwapWithPermit', [
-            user,
-            tokenIn,
-            tokenOut,
-            amountInValue,
-            amountOutMinValue,
-            deadlineValue,
-            vValue,
-            signature.r,
-            signature.s,
-          ]),
-          value: 0n,
-          gasPrice: currentGasPrice ?? undefined,
-        });
+        txResponse = await (await adminWallet.sendTransactionAsFeePayer(senderTxHashRLP)).wait();
         txHash = txResponse?.hash;
         if (txHash) break;
       } catch (sendErr) {
