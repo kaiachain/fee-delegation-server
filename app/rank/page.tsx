@@ -14,7 +14,8 @@ export default function Page() {
   useEffect(() => {
     const fetchDapps = async () => {
       try {
-        const result = await fetchPublicData("/dapps?usageSummary=true", { method: "GET" });
+        // const result = await fetchPublicData("/dapps?usageSummary=true", { method: "GET" });
+        const result = await fetchPublicData("/dapps", { method: "GET" });
         if (!result.status) {
           console.error("Failed to fetch DApps:", result.message);
           setDapps([]);

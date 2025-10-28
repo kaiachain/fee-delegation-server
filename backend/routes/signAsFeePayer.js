@@ -8,6 +8,7 @@ const {
   sanitizeErrorMessage,
   logError,
   getCleanErrorMessage,
+  jsonStringifySafe,
   checkWhitelistedAndGetDapp,
   isEnoughBalance,
   validateSwapTransaction,
@@ -185,7 +186,7 @@ router.post('/', async (req, res) => {
     try {
       console.log('Request ID:'+ uniqueId + ' - Start : ' + userSignedTxRlp);
       tx = parseTransaction(userSignedTxRlp);
-      console.log('Request ID:'+ uniqueId + ' - Tx Parsed: ' + JSON.stringify(tx));
+      console.log('Request ID:'+ uniqueId + ' - Tx Parsed: ' + jsonStringifySafe(tx));
     } catch (e) {
       // Log error cleanly and return sanitized message to client
       logError(e, uniqueId, 'Transaction parsing failed');
@@ -201,8 +202,8 @@ router.post('/', async (req, res) => {
     }
 
     let dapp;
-    const targetContract = (tx.to || '').toLowerCase();
-    const sender = (tx.from || '').toLowerCase();
+    let targetContract = (tx.to || '').toLowerCase();
+    let sender = (tx.from || '').toLowerCase();
 
     // if it's testnet, allow all transactions
     if (process.env.NETWORK === 'mainnet') {
@@ -304,7 +305,6 @@ router.post('/', async (req, res) => {
       process.env.FEE_PAYER_PRIVATE_KEY || '',
       provider
     );
-    console.info('Request ID:'+ uniqueId + ' - signAsFeePayer using fee payer wallet:', feePayer.address);
 
     const feePayerSignedTx = await feePayer.signTransactionAsFeePayer(tx);
     let txHash;
@@ -351,29 +351,36 @@ router.post('/', async (req, res) => {
       return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed', uniqueId);
     }
 
+    console.log('Request ID:' + uniqueId + ' - Settlement started');
+    targetContract = (receipt.to || tx.to || '').toLowerCase();
+    sender = (receipt.from || tx.from || '').toLowerCase();
+    let settlementSuccess = false;
     try {
-      console.log('Request ID:'+ uniqueId + ' - Settlement started');
-      const targetContract = (receipt.to || tx.to || '').toLowerCase();
-      const sender = (receipt.from || tx.from || '').toLowerCase();
       await settlement({ dapp, receipt, targetContract, sender, txHash });
+      settlementSuccess = true;
     } catch (error) {
       logError(error, uniqueId, 'Settlement failed');
-      return createResponse(res, 'INTERNAL_ERROR', `Settlement failed: ${getCleanErrorMessage(error)}`, uniqueId);
     }
 
     if (receipt.status === 0) {
       console.error('Request ID:'+ uniqueId + ' - [REVERTED] Transaction hash: ', txHash);
-      return createResponse(res, 'REVERTED', receipt, uniqueId);
+      return createResponse(res, 'REVERTED', { ...receipt, settlementSuccess }, uniqueId);
     }
 
     console.info('Request ID:'+ uniqueId + ' - [SUCCESS] Transaction hash: ', txHash);
-    return createResponse(res, 'SUCCESS', receipt, uniqueId);
+    return createResponse(res, 'SUCCESS', { ...receipt, settlementSuccess }, uniqueId);
   } catch (error) {
     // Log the main error cleanly
     logError(error, uniqueId, 'Main request processing failed');
     return createResponse(res, 'INTERNAL_ERROR', getCleanErrorMessage(error), uniqueId);
   }
 });
+
+function safeAddBigInt(current, addition) {
+  const currentValue = typeof current === 'bigint' ? current : BigInt(current);
+  const additionValue = typeof addition === 'bigint' ? addition : BigInt(addition);
+  return currentValue + additionValue;
+}
 
 async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
   if (process.env.NETWORK !== 'mainnet') {
@@ -385,8 +392,8 @@ async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
   }
 
   const gasPriceValue = receipt?.gasPrice ?? receipt?.effectiveGasPrice;
-  if (receipt?.gasUsed === undefined || gasPriceValue === undefined) {
-    throw new Error('field missing in receipt:' + JSON.stringify(receipt));
+    if (receipt?.gasUsed === undefined || gasPriceValue === undefined) {
+      throw new Error('field missing in receipt:' + jsonStringifySafe(receipt));
   }
 
   const gasUsed = typeof receipt.gasUsed === 'bigint' ? receipt.gasUsed : BigInt(receipt.gasUsed);
@@ -398,13 +405,29 @@ async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
   let nextTotalUsed;
 
   await prisma.$transaction(async (tx) => {
-    const currentSnapshot = await tx.dApp.findUnique({
-      where: { id: dapp.id },
-      select: {
-        balance: true,
-        totalUsed: true,
-      },
-    });
+    const [currentSnapshot, existingUsage] = await Promise.all([
+      tx.dApp.findUnique({
+        where: { id: dapp.id },
+        select: {
+          balance: true,
+          totalUsed: true,
+        },
+      }),
+      targetContract
+        ? tx.contractUsage.findUnique({
+            where: {
+              dappId_contractAddress: {
+                dappId: dapp.id,
+                contractAddress: targetContract,
+              },
+            },
+            select: {
+              id: true,
+              totalUsed: true,
+            },
+          })
+        : Promise.resolve(null),
+    ]);
 
     if (!currentSnapshot) {
       throw new Error(`DApp ${dapp.id} not found during settlement`);
@@ -421,37 +444,47 @@ async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
       },
     });
 
+    let contractUsagePromise = Promise.resolve();
     if (targetContract) {
-      await tx.contractUsage.upsert({
-        where: {
-          dappId_contractAddress: {
-            dappId: dapp.id,
-            contractAddress: targetContract,
-          },
-        },
-        update: {
-          totalUsed: { increment: usedFee },
-        },
-        create: {
-          dappId: dapp.id,
-          contractAddress: targetContract,
-          totalUsed: usedFee,
-        },
-      });
+      const currentTotal = existingUsage?.totalUsed ?? '0';
+      let updatedTotal;
+      try {
+        updatedTotal = safeAddBigInt(currentTotal, usedFee).toString();
+      } catch (sumError) {
+        throw new Error(`Failed to update contract usage in settlement: ${sumError.message}`);
+      }
+
+      contractUsagePromise = existingUsage
+        ? tx.contractUsage.update({
+            where: { id: existingUsage.id },
+            data: {
+              totalUsed: updatedTotal,
+            },
+          })
+        : tx.contractUsage.create({
+            data: {
+              dappId: dapp.id,
+              contractAddress: targetContract,
+              totalUsed: updatedTotal,
+            },
+          });
     }
 
-    await tx.transactionLog.create({
-      data: {
-        dappId: dapp.id,
-        contractAddress: contractAddressForLog,
-        senderAddress: sender,
-        usedFee,
-        gasUsed,
-        gasPrice,
-        txHash,
-        blockNumber: BigInt(receipt.blockNumber ?? 0),
-      },
-    });
+    await Promise.all([
+      contractUsagePromise,
+      tx.transactionLog.create({
+        data: {
+          dappId: dapp.id,
+          contractAddress: contractAddressForLog,
+          senderAddress: sender,
+          usedFee: usedFee.toString(),
+          gasUsed: gasUsed.toString(),
+          gasPrice: gasPrice.toString(),
+          txHash,
+          blockNumber: BigInt(receipt.blockNumber ?? 0).toString(),
+        },
+      }),
+    ]);
   });
 
   // Get updated DApp with email alerts

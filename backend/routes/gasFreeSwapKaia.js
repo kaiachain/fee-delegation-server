@@ -203,7 +203,6 @@ router.post('/', async (req, res) => {
 
     const provider = pickProviderFromPool();
     const adminWallet = new Wallet(adminAddress, adminPrivateKey, provider);
-    console.info('Request ID:' + requestId + ' - gasFreeSwapKaia using admin wallet:', adminWallet.address);
 
     let currentGasPrice = null;
     try {

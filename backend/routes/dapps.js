@@ -44,7 +44,7 @@ router.get('/', async (req, res) => {
           ...dapp,
           contractUsages: (dapp.contractUsages || []).map((usage) => ({
             contractAddress: usage.contractAddress,
-            totalUsed: usage.totalUsed.toString(),
+            totalUsed: usage.totalUsed?.toString?.() ?? usage.totalUsed,
             updatedAt: usage.updatedAt?.toISOString?.() || usage.updatedAt,
           })),
         }))
@@ -616,7 +616,7 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
         assignedUsers: dapp.userAccess?.map((access) => access.user) || [],
         contractUsages: dapp.contractUsages?.map((usage) => ({
           contractAddress: usage.contractAddress,
-          totalUsed: usage.totalUsed.toString(),
+          totalUsed: usage.totalUsed?.toString?.() ?? usage.totalUsed,
         })) || [],
       };
     });

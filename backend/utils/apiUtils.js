@@ -17,11 +17,46 @@ const RESPONSE_MAP = {
   UNAUTHORIZED: { message: "Unauthorized access", status: 401 },
 };
 
+const normalizeForJson = (value) => {
+  if (value === null || value === undefined) {
+    return value;
+  }
+
+  if (typeof value === 'bigint') {
+    return value.toString();
+  }
+
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForJson(item));
+  }
+
+  if (typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([key, nested]) => [key, normalizeForJson(nested)])
+    );
+  }
+
+  return value;
+};
+
+const jsonStringifySafe = (value) => {
+  try {
+    return JSON.stringify(normalizeForJson(value));
+  } catch (err) {
+    console.error('Failed to stringify value safely', err);
+    return '[unserializable value]';
+  }
+};
+
 const createResponse = (res, type, data, requestId = null) => {
   const { message, status } = RESPONSE_MAP[type];
   const payload = {
     message,
-    data,
+    data: normalizeForJson(data),
     error: type !== "SUCCESS" ? type : undefined,
     status: type === "SUCCESS",
     requestId: requestId || undefined
@@ -643,4 +678,6 @@ module.exports = {
   applyDappAccessFilter,
   hasUserDappAccess,
   validateEmailAlertAccess,
+  jsonStringifySafe,
+  normalizeForJson,
 }; 
