@@ -92,7 +92,7 @@ model ContractUsage {
   dapp            DApp     @relation(fields: [dappId], references: [id], onDelete: Cascade)
   dappId          String
   contractAddress String
-  totalUsed       BigInt   @default(0)
+  totalUsed       String   @default("0")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -106,11 +106,11 @@ model TransactionLog {
   dappId          String
   contractAddress String
   senderAddress   String
-  usedFee         BigInt
-  gasUsed         BigInt
-  gasPrice        BigInt
+  usedFee         String
+  gasUsed         String
+  gasPrice        String
   txHash          String   @unique
-  blockNumber     BigInt
+  blockNumber     String
   createdAt       DateTime @default(now())
 
   @@index([dappId, createdAt])

@@ -43,11 +43,17 @@ const ContractUsageTable: React.FC<ContractUsageTableProps> = ({ usages, title, 
   const sorted = (usages || [])
     .map((usage) => ({
       ...usage,
+      totalUsed: usage.totalUsed || "0",
       totalUsedBigInt: BigInt(usage.totalUsed || "0"),
     }))
-    .sort((a, b) => Number(b.totalUsedBigInt - a.totalUsedBigInt));
+    .sort((a, b) => {
+      if (a.totalUsedBigInt === b.totalUsedBigInt) {
+        return 0;
+      }
+      return a.totalUsedBigInt < b.totalUsedBigInt ? 1 : -1;
+    });
 
-  const total = sorted.reduce((acc, usage) => acc + Number(usage.totalUsed || "0"), 0);
+  const total = sorted.reduce((acc, usage) => acc + usage.totalUsedBigInt, BigInt(0));
 
   if (sorted.length === 0) {
     return (
