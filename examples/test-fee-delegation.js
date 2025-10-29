@@ -19,7 +19,7 @@ const CONFIG = {
   apiKey: null,
 
   // Test transaction details
-  to: '0x65E9d8b6069eEc1Ef3b8bfaE57326008b7aec2c9', // Replace with actual address
+  to: 'wallet_address', // Replace with actual address
   amount: '0', // KAIA amount to send
   
   // Fee payer address (your server's fee payer address)
@@ -90,7 +90,6 @@ async function testFeeDelegation() {
       body: JSON.stringify({
         userSignedTx: {
           raw: signedTx
-          // raw: "0x31f8c4808505e1046c80830279ae94d077a400968890eacc75cdc901f0356c943e4fdb8093c2de52067bacb956447fb9c8f6640f698d8a42b844095ea7b30000000000000000000000000ad835bc633552d80cdc4f6e411210b517e1397bfffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff847f845824056a089e52b302c6629e1d5a62dbb2bb8ea8fb6512405510b4f123695d06e507558a6a07030f207e77071e305573ce88c20caec349d41458ac1730ea24b859d500a7660"
         }
       })
     });
