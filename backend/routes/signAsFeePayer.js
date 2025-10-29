@@ -53,6 +53,8 @@ router.options('/', async (req, res) => {
  *       **Response includes:**
  *       - Unique request ID for error tracking
  *       - Sanitized error messages (RPC URLs hidden for security)
+ *       - settlementSuccess flag indicating whether post-transaction settlement completed
+ *       - transaction receipt
  *     security:
  *       - BearerAuth: []
  *       - {}
@@ -100,6 +102,7 @@ router.options('/', async (req, res) => {
  *                     logsBloom: "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
  *                     status: 1
  *                     to: "0x9876543210987654321098765432109876543210"
+ *                     settlementSuccess: true
  *                   status: true
  *                   requestId: "req123abc456def789"
  *               reverted:
@@ -118,9 +121,10 @@ router.options('/', async (req, res) => {
  *                     hash: "0x9999999999999999999999999999999999999999999999999999999999999999"
  *                     status: 0
  *                     to: "0x2222222222222222222222222222222222222222"
+ *                     settlementSuccess: false
  *                   error: "REVERTED"
  *                   status: false
- *                   requestId: "rev456def789abc123"
+ *                   requestId: "rev123abc456def789"
  *       400:
  *         description: Bad request - validation failed
  *         content:

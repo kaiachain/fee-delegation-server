@@ -77,7 +77,7 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                     hash: "0x9f83..."
  *                     status: 1
  *                   status: true
- *                   requestId: "req_success_example"
+ *                   requestId: "req123abc456def789"
  *       400:
  *         description: Validation or transaction failure
  *         content:
@@ -92,7 +92,7 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                   data: "Permit deadline has expired"
  *                   error: "BAD_REQUEST"
  *                   status: false
- *                   requestId: "req_invalid_permit"
+ *                   requestId: "req234bcd567efg890"
  *               txRevert:
  *                 summary: Transaction reverted on-chain
  *                 value:
@@ -100,7 +100,7 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                   data: "execution reverted: Permit already used"
  *                   error: "BAD_REQUEST"
  *                   status: false
- *                   requestId: "req_tx_revert"
+ *                   requestId: "req345cde678fgh901"
  *       500:
  *         description: Internal server error
  *         content:
@@ -115,7 +115,7 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                   data: "Sending transaction was failed after 5 try, network is busy. Error message: Network timeout [RPC_URL_HIDDEN]"
  *                   error: "INTERNAL_ERROR"
  *                   status: false
- *                   requestId: "req_rpc_failure"
+ *                   requestId: "req456def789ghi012"
  */
 router.post('/', async (req, res) => {
   const requestId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
