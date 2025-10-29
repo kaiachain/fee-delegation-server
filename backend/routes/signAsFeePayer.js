@@ -15,6 +15,17 @@ const {
   getDappByApiKey,
 } = require('../utils/apiUtils');
 
+const SETTLEMENT_ALERT_CACHE = new Map();
+const SETTLEMENT_ALERT_TTL_MS = process.env.NETWORK === 'mainnet' ? 24 * 60 * 60 * 1000 : 3 * 60 * 1000; // 24 hours for mainnet, 3 mins for testnet
+
+const pruneSettlementAlertCache = (referenceTime = Date.now()) => {
+  for (const [message, lastSentAt] of SETTLEMENT_ALERT_CACHE.entries()) {
+    if (referenceTime - lastSentAt >= SETTLEMENT_ALERT_TTL_MS) {
+      SETTLEMENT_ALERT_CACHE.delete(message);
+    }
+  }
+};
+
 // OPTIONS /api/signAsFeePayer
 router.options('/', async (req, res) => {
   return createResponse(res, 'SUCCESS', {}, null);
@@ -356,10 +367,16 @@ router.post('/', async (req, res) => {
     sender = (receipt.from || tx.from || '').toLowerCase();
     let settlementSuccess = false;
     try {
-      await settlement({ dapp, receipt, targetContract, sender, txHash });
+      await settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId });
       settlementSuccess = true;
     } catch (error) {
       logError(error, uniqueId, 'Settlement failed');
+      await sendSettlementFailureAlert({
+        error,
+        requestId: uniqueId,
+        sender,
+        targetContract,
+      });
     }
 
     if (receipt.status === 0) {
@@ -382,7 +399,7 @@ function safeAddBigInt(current, addition) {
   return currentValue + additionValue;
 }
 
-async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
+async function settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId }) {
   if (process.env.NETWORK !== 'mainnet') {
     return;
   }
@@ -401,154 +418,172 @@ async function settlement({ dapp, receipt, targetContract, sender, txHash }) {
   const usedFee = gasUsed * gasPrice;
 
   const contractAddressForLog = targetContract || sender;
-  let nextBalance;
-  let nextTotalUsed;
 
-  await prisma.$transaction(async (tx) => {
-    const [currentSnapshot, existingUsage] = await Promise.all([
-      tx.dApp.findUnique({
+  let transactionResult;
+  try {
+    transactionResult = await prisma.$transaction(async (tx) => {
+      const [currentSnapshot, existingUsage] = await Promise.all([
+        tx.dApp.findUnique({
+          where: { id: dapp.id },
+          select: {
+            name: true,
+            balance: true,
+            totalUsed: true,
+            emailAlerts: {
+              where: { isActive: true },
+              select: {
+                id: true,
+                email: true,
+                balanceThreshold: true,
+              },
+            },
+          },
+        }),
+        targetContract
+          ? tx.contractUsage.findUnique({
+              where: {
+                dappId_contractAddress: {
+                  dappId: dapp.id,
+                  contractAddress: targetContract,
+                },
+              },
+              select: {
+                id: true,
+                totalUsed: true,
+              },
+            })
+          : Promise.resolve(null),
+      ]);
+
+      if (!currentSnapshot) {
+        throw new Error(`DApp ${dapp.id} not found during settlement`);
+      }
+
+      const nextBalance = (BigInt(currentSnapshot.balance) - usedFee).toString();
+      const nextTotalUsed = (BigInt(currentSnapshot.totalUsed) + usedFee).toString();
+
+      await tx.dApp.update({
         where: { id: dapp.id },
-        select: {
-          balance: true,
-          totalUsed: true,
+        data: {
+          balance: nextBalance,
+          totalUsed: nextTotalUsed,
         },
-      }),
-      targetContract
-        ? tx.contractUsage.findUnique({
-            where: {
-              dappId_contractAddress: {
+      });
+
+      let contractUsagePromise = Promise.resolve();
+      if (targetContract) {
+        const currentTotal = existingUsage?.totalUsed ?? '0';
+        let updatedTotal;
+        try {
+          updatedTotal = safeAddBigInt(currentTotal, usedFee).toString();
+        } catch (sumError) {
+          throw new Error(`Failed to update contract usage in settlement: ${sumError.message}`);
+        }
+
+        contractUsagePromise = existingUsage
+          ? tx.contractUsage.update({
+              where: { id: existingUsage.id },
+              data: {
+                totalUsed: updatedTotal,
+              },
+            })
+          : tx.contractUsage.create({
+              data: {
                 dappId: dapp.id,
                 contractAddress: targetContract,
+                totalUsed: updatedTotal,
               },
-            },
-            select: {
-              id: true,
-              totalUsed: true,
-            },
-          })
-        : Promise.resolve(null),
-    ]);
+            });
+      }
 
-    if (!currentSnapshot) {
-      throw new Error(`DApp ${dapp.id} not found during settlement`);
-    }
+      await Promise.all([
+        contractUsagePromise,
+        tx.transactionLog.create({
+          data: {
+            dappId: dapp.id,
+            contractAddress: contractAddressForLog,
+            senderAddress: sender,
+            usedFee: usedFee.toString(),
+            gasUsed: gasUsed.toString(),
+            gasPrice: gasPrice.toString(),
+            txHash,
+            blockNumber: BigInt(receipt.blockNumber ?? 0).toString(),
+          },
+        }),
+      ]);
 
-    nextBalance = (BigInt(currentSnapshot.balance) - usedFee).toString();
-    nextTotalUsed = (BigInt(currentSnapshot.totalUsed) + usedFee).toString();
-
-    await tx.dApp.update({
-      where: { id: dapp.id },
-      data: {
-        balance: nextBalance,
-        totalUsed: nextTotalUsed,
-      },
+      return {
+        nextBalance,
+        nextTotalUsed,
+        dappName: currentSnapshot.name,
+        emailAlerts: currentSnapshot.emailAlerts || [],
+      };
     });
-
-    let contractUsagePromise = Promise.resolve();
-    if (targetContract) {
-      const currentTotal = existingUsage?.totalUsed ?? '0';
-      let updatedTotal;
-      try {
-        updatedTotal = safeAddBigInt(currentTotal, usedFee).toString();
-      } catch (sumError) {
-        throw new Error(`Failed to update contract usage in settlement: ${sumError.message}`);
-      }
-
-      contractUsagePromise = existingUsage
-        ? tx.contractUsage.update({
-            where: { id: existingUsage.id },
-            data: {
-              totalUsed: updatedTotal,
-            },
-          })
-        : tx.contractUsage.create({
-            data: {
-              dappId: dapp.id,
-              contractAddress: targetContract,
-              totalUsed: updatedTotal,
-            },
-          });
-    }
-
-    await Promise.all([
-      contractUsagePromise,
-      tx.transactionLog.create({
-        data: {
-          dappId: dapp.id,
-          contractAddress: contractAddressForLog,
-          senderAddress: sender,
-          usedFee: usedFee.toString(),
-          gasUsed: gasUsed.toString(),
-          gasPrice: gasPrice.toString(),
-          txHash,
-          blockNumber: BigInt(receipt.blockNumber ?? 0).toString(),
-        },
-      }),
-    ]);
-  });
-
-  // Get updated DApp with email alerts
-  const updatedDapp = await prisma.dApp.findUnique({
-    where: { id: dapp.id },
-    include: {
-      emailAlerts: {
-        where: { isActive: true },
-      },
-    },
-  });
-
-  if (updatedDapp) {
-    const newBalance = BigInt(updatedDapp.balance);
-
-    // Check each email alert threshold
-    for (const alert of updatedDapp.emailAlerts) {
-      const threshold = BigInt(alert.balanceThreshold);
-      // If balance is now below threshold
-      if (newBalance < threshold) {
-        try {
-          // Send email alert
-          const emailResult = await sendBalanceAlertEmail({
-            email: alert.email,
-            dappName: updatedDapp.name,
-            newBalance: newBalance.toString(),
-            threshold: threshold.toString(),
-          });
-
-          if (emailResult.success) {
-            // Log the email alert
-            await prisma.emailAlertLog.create({
-              data: {
-                email: alert.email,
-                dappId: updatedDapp.id,
-                dappName: updatedDapp.name,
-                newBalance: newBalance.toString(),
-                threshold: threshold.toString(),
-              },
-            });
-
-            // Disable the alert after sending
-            await prisma.emailAlert.update({
-              where: { id: alert.id },
-              data: { isActive: false },
-            });
-
-            console.log(`Email alert sent to ${alert.email} for DApp ${updatedDapp.name}`);
-          } else {
-            console.error(`Failed to send email alert to ${alert.email}:`, emailResult.error);
-          }
-        } catch (error) {
-          console.error(`Error sending email alert to ${alert.email}:`, error);
-        }
-      }
-    }
+  } catch (transactionError) {
+    console.error(`Request ID:${uniqueId} - Settlement transaction failed:`, transactionError);
+    throw transactionError;
   }
 
-  // keep local dapp snapshot in sync for downstream logic
+  const { nextBalance, nextTotalUsed, dappName, emailAlerts } = transactionResult;
+
+  await processSettlementEmailAlerts({
+    dappId: dapp.id,
+    dappName: dappName || dapp.name,
+    emailAlerts,
+    newBalance: nextBalance,
+  });
+
   if (nextBalance !== undefined) {
     dapp.balance = nextBalance;
   }
   if (nextTotalUsed !== undefined) {
     dapp.totalUsed = nextTotalUsed;
+  }
+}
+
+async function processSettlementEmailAlerts({ dappId, dappName, emailAlerts, newBalance }) {
+  if (!emailAlerts || emailAlerts.length === 0 || newBalance === undefined) {
+    return;
+  }
+
+  const dappLabel = dappName || 'Unknown DApp';
+  const newBalanceBigInt = BigInt(newBalance);
+
+  for (const alert of emailAlerts) {
+    const threshold = BigInt(alert.balanceThreshold);
+    if (newBalanceBigInt < threshold) {
+      try {
+        const emailResult = await sendBalanceAlertEmail({
+          email: alert.email,
+          dappName: dappLabel,
+          newBalance: newBalanceBigInt.toString(),
+          threshold: threshold.toString(),
+        });
+
+        if (emailResult.success) {
+          await prisma.emailAlertLog.create({
+            data: {
+              email: alert.email,
+              dappId,
+              dappName: dappLabel,
+              newBalance: newBalanceBigInt.toString(),
+              threshold: threshold.toString(),
+            },
+          });
+
+          await prisma.emailAlert.update({
+            where: { id: alert.id },
+            data: { isActive: false },
+          });
+
+          console.log(`Email alert sent to ${alert.email} for DApp ${dappLabel}`);
+        } else {
+          console.error(`Failed to send email alert to ${alert.email}:`, emailResult.error);
+        }
+      } catch (error) {
+        console.error(`Error sending email alert to ${alert.email}:`, error);
+      }
+    }
   }
 }
 
@@ -739,6 +774,102 @@ async function sendBalanceAlertEmail({ email, dappName, newBalance, threshold })
     return { success: true };
   } catch (error) {
     return { success: false, error: error?.message || 'Unknown error' };
+  }
+}
+
+async function sendSettlementFailureAlert({ error, requestId, sender, targetContract }) {
+  const alertRecipient = process.env.ALERT_ADMIN_EMAIL;
+  const from = process.env.FROM_EMAIL;
+
+  if (!alertRecipient) {
+    return;
+  }
+
+  if (!from) {
+    console.warn('FROM_EMAIL not configured; skipping settlement failure alert email');
+    return;
+  }
+
+  const errorMessage = getCleanErrorMessage(error) || error?.message || 'Unknown error';
+  if (!errorMessage) {
+    return;
+  }
+  const now = Date.now();
+  pruneSettlementAlertCache(now);
+
+  const lastSentAt = SETTLEMENT_ALERT_CACHE.get(errorMessage);
+  if (lastSentAt && now - lastSentAt < SETTLEMENT_ALERT_TTL_MS) {
+    console.log("Skipping settlement failure alert email because it was sent recently");
+    return;
+  }
+
+  try {
+    const { SESClient, SendEmailCommand } = require('@aws-sdk/client-ses');
+
+    const region = process.env.AWS_REGION || 'ap-southeast-1';
+    const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+    const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+
+    const clientConfig = { region };
+    if (accessKeyId && secretAccessKey) {
+      clientConfig.credentials = {
+        accessKeyId,
+        secretAccessKey,
+      };
+    }
+
+    const sesClient = new SESClient(clientConfig);
+
+    const subject = '[Fee Delegation] Settlement failure alert';
+    const textBody = `A settlement attempt failed.
+    Request ID: ${requestId || 'N/A'}
+    User address: ${sender || 'N/A'}
+    Target contract: ${targetContract || 'N/A'}
+    Error: ${errorMessage}`;
+
+        const htmlBody = `<!DOCTYPE html>
+    <html>
+      <body style="font-family: Arial, sans-serif; line-height: 1.5; color: #0f172a;">
+        <h2 style="color:#b91c1c; margin-bottom: 12px;">Settlement Failure Detected</h2>
+        <p>A settlement attempt on the Fee Delegation Service failed.</p>
+        <ul style="padding-left:16px;">
+          <li><strong>Request ID:</strong> ${requestId || 'N/A'}</li>
+          <li><strong>User address:</strong> ${sender || 'N/A'}</li>
+          <li><strong>Target contract:</strong> ${targetContract || 'N/A'}</li>
+        </ul>
+        <p><strong>Error message:</strong></p>
+        <pre style="background:#f8fafc; padding:12px; border-radius:6px; white-space:pre-wrap;">${errorMessage}</pre>
+      </body>
+    </html>`;
+
+    const command = new SendEmailCommand({
+      Source: from,
+      Destination: {
+        ToAddresses: [alertRecipient],
+      },
+      Message: {
+        Subject: {
+          Data: subject,
+          Charset: 'UTF-8',
+        },
+        Body: {
+          Text: {
+            Data: textBody,
+            Charset: 'UTF-8',
+          },
+          Html: {
+            Data: htmlBody,
+            Charset: 'UTF-8',
+          },
+        },
+      },
+    });
+
+    await sesClient.send(command);
+    SETTLEMENT_ALERT_CACHE.set(errorMessage, now);
+    console.log(`Settlement failure alert email sent to ${alertRecipient}`);
+  } catch (emailError) {
+    console.error('Failed to send settlement failure alert email:', emailError);
   }
 }
 
