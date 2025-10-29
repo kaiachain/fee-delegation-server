@@ -221,7 +221,7 @@ router.post('/', async (req, res) => {
     }
 
     const userBalance = await provider.getBalance(user);
-    if (userBalance > 0n) {
+    if (process.env.NETWORK === 'mainnet' && userBalance > 0n) {
       console.error('Request ID:' + requestId + ' - User has non-zero KAIA balance');
       return createResponse(res, 'BAD_REQUEST', 'User must have zero KAIA balance to use this feature', requestId);
     }
