@@ -108,6 +108,11 @@ const options = {
             to: {
               type: 'string',
               example: '0x6C4ED74027ab609f506efCdd224041c9F5b5CDE1'
+            },
+            settlementSuccess: {
+              type: 'boolean',
+              description: 'Indicates whether post-transaction settlement succeeded',
+              example: true
             }
           }
         },

@@ -32,7 +32,7 @@ router.options('/', async (req, res) => {
  *       - name: address
  *         in: query
  *         description: Contract or sender address to check balance for (required when no API key provided)
- *         required: false
+ *         required: true
  *         schema:
  *           type: string
  *           pattern: '^0x[a-fA-F0-9]{40}$'
@@ -51,14 +51,12 @@ router.options('/', async (req, res) => {
  *                   message: "Request was successful"
  *                   data: true
  *                   status: true
- *                   requestId: "balance123abc456def"
  *               insufficient_balance:
  *                 summary: Insufficient Balance
  *                 value:
  *                   message: "Request was successful"
  *                   data: false
  *                   status: true
- *                   requestId: "balance456def789abc"
  *       400:
  *         description: Bad request
  *         content:
