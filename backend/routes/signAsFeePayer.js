@@ -383,13 +383,15 @@ router.post('/', async (req, res) => {
       });
     }
 
+    const sanitizedReceipt = sanitizeTransactionReceipt(receipt);
+
     if (receipt.status === 0) {
       console.error('Request ID:'+ uniqueId + ' - [REVERTED] Transaction hash: ', txHash);
-      return createResponse(res, 'REVERTED', { ...receipt, settlementSuccess }, uniqueId);
+      return createResponse(res, 'REVERTED', { ...sanitizedReceipt, settlementSuccess }, uniqueId);
     }
 
     console.info('Request ID:'+ uniqueId + ' - [SUCCESS] Transaction hash: ', txHash);
-    return createResponse(res, 'SUCCESS', { ...receipt, settlementSuccess }, uniqueId);
+    return createResponse(res, 'SUCCESS', { ...sanitizedReceipt, settlementSuccess }, uniqueId);
   } catch (error) {
     // Log the main error cleanly
     logError(error, uniqueId, 'Main request processing failed');
@@ -401,6 +403,15 @@ function safeAddBigInt(current, addition) {
   const currentValue = typeof current === 'bigint' ? current : BigInt(current);
   const additionValue = typeof addition === 'bigint' ? addition : BigInt(addition);
   return currentValue + additionValue;
+}
+
+function sanitizeTransactionReceipt(receipt) {
+  if (!receipt || typeof receipt !== 'object') {
+    return receipt;
+  }
+
+  const { provider, ...rest } = receipt;
+  return rest;
 }
 
 async function settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId }) {
