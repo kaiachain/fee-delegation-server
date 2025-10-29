@@ -52,7 +52,7 @@ async function testFeeDelegation() {
       value: 0,
       to: "0xa9eF4a5BfB21e92C06da23Ed79294DaB11F5A6df",
       data: '0xd09de08a',
-      // gasLimit: 100000,
+      gasLimit: 100000,
       gasPrice: await provider.getGasPrice(),
       nonce: (await wallet.getTransactionCount()),
     };
