@@ -1,23 +1,67 @@
 import { ethers } from "ethers";
 
+// Number of decimal places shown in UI (e.g. 5 decimal places = 0.00000)
+const DISPLAY_DECIMALS = BigInt(5);
+// Native KAIA uses 18 decimal places (like wei -> ether)
+const WEI_DECIMALS = BigInt(18);
+const WEI_UNIT = BigInt(10) ** WEI_DECIMALS;
+const SCALE = BigInt(10) ** DISPLAY_DECIMALS;
+
 /**
- * Formats a balance value from wei to a human-readable format
- * @param balance - Balance in wei (string or number)
- * @returns Formatted balance with 5 decimal places
+ * Convert a decimal string (e.g. "123.45") into wei using bigint arithmetic.
+ * This avoids floating point rounding errors when dealing with huge values.
  */
-export const formatBalance = (balance: string | number): string => {
-  if (!balance) return "0.00000";
-  
+const normalizeToWei = (value: string): bigint => {
+  if (!value.includes('.')) {
+    return BigInt(value);
+  }
+
+  const [wholePart, fractionPart = ''] = value.split('.');
+  const paddedFraction = (fractionPart + '0'.repeat(Number(WEI_DECIMALS))).slice(0, Number(WEI_DECIMALS));
+  return BigInt(wholePart) * WEI_UNIT + BigInt(paddedFraction);
+};
+
+/**
+ * Convert a wei bigint into a human-readable KAIA string with DISPLAY_DECIMALS precision.
+ * Uses pure bigint math so extremely large balances remain accurate.
+ */
+const formatWei = (weiValue: bigint): string => {
+  const negative = weiValue < BigInt(0);
+  let wei = negative ? -weiValue : weiValue;
+
+  // Multiply by SCALE to preserve DISPLAY_DECIMALS, then round to the nearest value
+  const scaled = (wei * SCALE + WEI_UNIT / BigInt(2)) / WEI_UNIT;
+  const integerPart = scaled / SCALE;
+  const fractionalPart = (scaled % SCALE).toString().padStart(Number(DISPLAY_DECIMALS), '0');
+  const formatted = `${integerPart.toString()}.${fractionalPart}`;
+
+  return negative ? `-${formatted}` : formatted;
+};
+
+/**
+ * Format a balance expressed in wei (string/number/bigint) into a KAIA string with fixed decimals.
+ * Falls back to ethers.formatUnits for unusual inputs, but still normalizes via bigint math.
+ */
+export const formatBalance = (balance: string | number | bigint): string => {
+  if (balance === null || balance === undefined) {
+    return '0.00000';
+  }
+
+  const stringValue = balance.toString();
+
   try {
-    // Convert to string if it's a number
-    const balanceStr = balance.toString();
-    
-    // Convert from wei to ether and format to 5 decimal places
-    const formatted = ethers.formatUnits(balanceStr, "ether");
-    return parseFloat(formatted).toFixed(5);
+    // Plain numeric strings are converted directly using bigint math
+    if (/^[-+]?\d+(\.\d+)?$/.test(stringValue)) {
+      const wei = normalizeToWei(stringValue);
+      return formatWei(wei);
+    }
+
+    // Fallback: let ethers parse the value, then normalise the result for consistent rounding
+    const formatted = ethers.formatUnits(stringValue, 'ether');
+    return formatWei(normalizeToWei(formatted));
   } catch (error) {
-    console.error("Error formatting balance:", error);
-    return "0.00000";
+    console.error('Error formatting balance:', error);
+    return '0.00000';
   }
 };
 
