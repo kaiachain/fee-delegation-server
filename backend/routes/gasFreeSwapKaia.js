@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Wallet, TxType } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, TxType, parseKlay } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const {
   createResponse,
@@ -253,20 +253,13 @@ router.post('/', async (req, res) => {
         signature.r,
         signature.s,
       ]),
-      value: BigInt(0),
+      value: parseKlay("0"),
       gasPrice: currentGasPrice ?? undefined,
       feePayer: adminAddress,
     };
 
-    const [nonce, gasEstimate] = await Promise.all([
-      adminSenderWallet.getNonce(),
-      adminSenderWallet.estimateGas(tx),
-    ]);
-
-    const gasLimitWithBuffer = ((gasEstimate * 120n) + 99n) / 100n; // add ~20% buffer, round up
-
-    tx.nonce = nonce;
-    tx.gasLimit = gasLimitWithBuffer > gasEstimate ? gasLimitWithBuffer : gasEstimate;
+    tx.nonce = await adminSenderWallet.getNonce();
+    tx.gasLimit = 400000;
 
     const senderTxHashRLP = await adminSenderWallet.signTransaction(tx);
     
