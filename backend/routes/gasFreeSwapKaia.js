@@ -255,6 +255,7 @@ router.post('/', async (req, res) => {
       ]),
       value: BigInt(0),
       gasPrice: currentGasPrice ?? undefined,
+      feePayer: adminAddress,
     };
 
     const [nonce, gasEstimate] = await Promise.all([
