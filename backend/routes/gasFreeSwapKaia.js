@@ -2,7 +2,13 @@ const express = require('express');
 const router = express.Router();
 const { Wallet, TxType } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
-const { createResponse, sanitizeErrorMessage, logError, getCleanErrorMessage } = require('../utils/apiUtils');
+const {
+  createResponse,
+  sanitizeErrorMessage,
+  logError,
+  getCleanErrorMessage,
+  sanitizeTransactionReceipt,
+} = require('../utils/apiUtils');
 const { ethers } = require('ethers');
 const { randomBytes } = require('crypto');
 
@@ -310,13 +316,15 @@ router.post('/', async (req, res) => {
       return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed', requestId);
     }
 
+    const sanitizedReceipt = sanitizeTransactionReceipt(receipt);
+
     if (receipt.status === 0) {
       console.error('Request ID:' + requestId + ' - [REVERTED] Transaction hash: ', txHash);
-      return createResponse(res, 'REVERTED', receipt, requestId);
+      return createResponse(res, 'REVERTED', sanitizedReceipt, requestId);
     }
 
     console.info('Request ID:' + requestId + ' - [SUCCESS] Transaction hash: ', txHash);
-    return createResponse(res, 'SUCCESS', receipt, requestId);
+    return createResponse(res, 'SUCCESS', sanitizedReceipt, requestId);
   } catch (error) {
     logError(error, requestId, 'Main request processing failed');
     return createResponse(res, 'INTERNAL_ERROR', getCleanErrorMessage(error), requestId);
