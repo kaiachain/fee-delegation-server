@@ -64,6 +64,15 @@ const createResponse = (res, type, data, requestId = null) => {
   return res.status(status).json(payload);
 };
 
+const sanitizeTransactionReceipt = (receipt) => {
+  if (!receipt || typeof receipt !== 'object') {
+    return receipt;
+  }
+
+  const { provider, ...rest } = receipt;
+  return rest;
+};
+
 // Helper function to sanitize error messages by removing RPC URLs
 const sanitizeErrorMessage = (errorMessage, requestId = null) => {
   if (!errorMessage) return errorMessage;
@@ -680,4 +689,5 @@ module.exports = {
   validateEmailAlertAccess,
   jsonStringifySafe,
   normalizeForJson,
+  sanitizeTransactionReceipt
 }; 
