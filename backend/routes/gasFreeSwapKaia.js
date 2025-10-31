@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Wallet, TxType, parseKlay } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, TxType, parseKlay, parseTransaction } = require('@kaiachain/ethers-ext/v6');
 const { pickProviderFromPool } = require('../utils/rpcProvider');
 const {
   createResponse,
@@ -258,8 +258,17 @@ router.post('/', async (req, res) => {
       feePayer: adminAddress,
     };
 
+    try {
+      await adminSenderWallet.estimateGas({ ...tx, gasPrice: 0n, value: 0n });
+    } catch (simulationError) {
+      logError(simulationError, requestId, 'Transaction simulation failed');
+      const clean = sanitizeErrorMessage(getCleanErrorMessage(simulationError));
+      return createResponse(res, 'BAD_REQUEST', clean, requestId);
+    }
+    
+
     tx.nonce = await adminSenderWallet.getNonce();
-    tx.gasLimit = 400000;
+    tx.gasLimit = 450000;
 
     const senderTxHashRLP = await adminSenderWallet.signTransaction(tx);
     
