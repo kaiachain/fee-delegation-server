@@ -268,7 +268,7 @@ router.post('/', async (req, res) => {
     
 
     tx.nonce = await adminSenderWallet.getNonce();
-    tx.gasLimit = 400000;
+    tx.gasLimit = 450000;
 
     const senderTxHashRLP = await adminSenderWallet.signTransaction(tx);
     
