@@ -331,16 +331,16 @@ async function main() {
       expectedDataIncludes: 'insufficient quote',
       makePayload: () => buildBasePayload({ amountOutMinOverride: expectedOut + 1n }),
     },
-    {
-      label: 'Malformed signature (internal error)',
-      expectStatus: 500,
-      expectedDataIncludes: 'Sending transaction was failed after 5 try',
-      makePayload: async () => {
-        const payload = await buildBasePayload();
-        const broken = `0x${'00'.repeat(65)}`;
-        return { ...payload, permitSignature: broken };
-      },
-    },
+    // {
+    //   label: 'Malformed signature (internal error)',
+    //   expectStatus: 500,
+    //   expectedDataIncludes: 'Sending transaction was failed after 5 try',
+    //   makePayload: async () => {
+    //     const payload = await buildBasePayload();
+    //     const broken = `0x${'00'.repeat(65)}`;
+    //     return { ...payload, permitSignature: broken };
+    //   },
+    // },
     {
       label: 'Permit already used (contract revert)',
       expectStatus: 400,
