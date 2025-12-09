@@ -292,7 +292,7 @@ router.post('/', async (req, res) => {
       }
 
       if (!isEnoughBalance(BigInt(dapp.balance || '0'))) {
-        console.error('Request ID:'+ uniqueId + ' - Insufficient balance in fee delegation server, please contact the administrator.');
+        console.error('Request ID:'+ uniqueId + ' - Insufficient balance in fee delegation server, please contact the administrator for ' + dapp.name + dapp.id);
         return createResponse(res, 'BAD_REQUEST', 'Insufficient balance in fee delegation server, please contact the administrator.', uniqueId);
       }
 
