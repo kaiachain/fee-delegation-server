@@ -17,6 +17,7 @@ const GASLESS_SWAP_ABI = [
 ];
 
 const MAX_GAS_PRICE = BigInt('50000000000'); // 50 gwei
+const USER_BALANCE_THRESHOLD = parseKlay('0.015'); // 0.015 KAIA in peb
 const SWAP_CONTRACT_ADDRESS = (process.env.GASLESS_SWAP_CONTRACT_ADDRESS || '').toLowerCase();
 const EXPECTED_TOKEN_IN = (process.env.GASLESS_SWAP_TOKEN_IN || '').toLowerCase();
 const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCase();
@@ -227,9 +228,14 @@ router.post('/', async (req, res) => {
     }
 
     const userBalance = await provider.getBalance(user);
-    if (process.env.NETWORK === 'mainnet' && userBalance > 0n) {
-      console.error('Request ID:' + requestId + ' - User has non-zero KAIA balance');
-      return createResponse(res, 'BAD_REQUEST', 'User must have zero KAIA balance to use this feature', requestId);
+    if (process.env.NETWORK === 'mainnet' && userBalance > USER_BALANCE_THRESHOLD) {
+      console.error('Request ID:' + requestId + ' - User KAIA balance above threshold');
+      return createResponse(
+        res,
+        'BAD_REQUEST',
+        'User KAIA balance must stay below 0.015 KAIA to use this feature',
+        requestId
+      );
     }
 
     let txHash;
