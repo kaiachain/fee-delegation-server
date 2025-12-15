@@ -15,6 +15,7 @@ const RESPONSE_MAP = {
   NOT_FOUND: { message: "Resource not found", status: 404 },
   CONFLICT: { message: "Resource already exists", status: 409 },
   UNAUTHORIZED: { message: "Unauthorized access", status: 401 },
+  SERVICE_UNAVAILABLE: { message: "Service temporarily unavailable", status: 503 },
 };
 
 const normalizeForJson = (value) => {
