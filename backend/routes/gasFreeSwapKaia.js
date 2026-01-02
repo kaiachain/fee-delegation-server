@@ -127,13 +127,13 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
 router.post('/', async (req, res) => {
   const requestId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
-  // TODO: Remove this block when maintenance is complete
-  return createResponse(
-    res,
-    'SERVICE_UNAVAILABLE',
-    'The gas-free swap service for USDT->KAIA is temporarily disabled for maintenance and will be available again soon. Thank you for your patience.',
-    requestId
-  );
+  // // TODO: Remove this block when maintenance is complete
+  // return createResponse(
+  //   res,
+  //   'SERVICE_UNAVAILABLE',
+  //   'The gas-free swap service for USDT->KAIA is temporarily disabled for maintenance and will be available again soon. Thank you for your patience.',
+  //   requestId
+  // );
 
   try {
     const { swap, permitSignature, ...unexpected } = req.body || {};
