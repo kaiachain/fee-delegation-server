@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { requireEditorOrSuperAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { sendAccountCreatedEmail, sendAccountCreatedWithPasswordSetupEmail } = require('../utils/emailService');
 
 function isValidEmail(email) {
@@ -24,7 +24,7 @@ router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // POST /api/users
-router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
     const { email, firstName, lastName, role } = req.body || {};
     if (!isValidEmail(email) || !firstName || !lastName) {
@@ -86,7 +86,7 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // PUT /api/users/:id
-router.put('/:id', requireEditorOrSuperAdmin, async (req, res) => {
+router.put('/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { firstName, lastName, role, isActive } = req.body || {};
@@ -110,7 +110,7 @@ router.put('/:id', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // DELETE /api/users/:id (soft delete by default, hard delete with ?hard=true)
-router.delete('/:id', requireEditorOrSuperAdmin, async (req, res) => {
+router.delete('/:id', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { hard } = req.query;
