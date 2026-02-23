@@ -74,15 +74,25 @@ const sanitizeTransactionReceipt = (receipt) => {
   return rest;
 };
 
+// Extract hostnames from configured RPC URLs for sanitization
+const rpcHostnames = (process.env.RPC_URL || "").split(",")
+  .map(u => { try { return new URL(u.trim()).hostname; } catch { return null; } })
+  .filter(Boolean);
+
 // Helper function to sanitize error messages by removing RPC URLs
 const sanitizeErrorMessage = (errorMessage, requestId = null) => {
   if (!errorMessage) return errorMessage;
   
-  // Remove RPC URLs from error messages for client responses
-  const sanitized = errorMessage
+  // Remove full RPC URLs from error messages
+  let sanitized = errorMessage
     .replace(/https?:\/\/[^\s,}"]+/g, '[RPC_URL_HIDDEN]')
     .replace(/"requestUrl"\s*:\s*"[^"]+"/g, '"requestUrl": "[RPC_URL_HIDDEN]"')
     .replace(/requestUrl[^,}]+/g, 'requestUrl: "[RPC_URL_HIDDEN]"');
+
+  // Remove bare hostnames from configured RPC URLs (e.g. in DNS errors like "ENOTFOUND hostname")
+  for (const hostname of rpcHostnames) {
+    sanitized = sanitized.replaceAll(hostname, '[RPC_HOST_HIDDEN]');
+  }
     
   return sanitized;
 };
