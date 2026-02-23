@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Wallet, TxType, parseKlay, parseTransaction } = require('@kaiachain/ethers-ext/v6');
-const { pickProviderFromPool } = require('../utils/rpcProvider');
+const { pickHealthyProvider, pickDifferentProvider, isRpcRelatedError } = require('../utils/rpcProvider');
 const {
   createResponse,
   sanitizeErrorMessage,
@@ -217,9 +217,13 @@ router.post('/', async (req, res) => {
       return createResponse(res, 'INTERNAL_ERROR', 'Server configuration error', requestId);
     }
 
-    const provider = pickProviderFromPool();
-    const adminWallet = new Wallet(adminAddress, adminPrivateKey, provider);
-    const adminSenderWallet = new Wallet(adminPrivateKey, provider);
+    let provider = await pickHealthyProvider(requestId);
+    if (!provider) {
+      console.error('Request ID:' + requestId + ' - All RPC providers are unavailable');
+      return createResponse(res, 'SERVICE_UNAVAILABLE', 'All RPC providers are currently unavailable, please try again later', requestId);
+    }
+    let adminWallet = new Wallet(adminAddress, adminPrivateKey, provider);
+    let adminSenderWallet = new Wallet(adminPrivateKey, provider);
 
     let currentGasPrice = null;
     try {
@@ -286,7 +290,6 @@ router.post('/', async (req, res) => {
     tx.gasLimit = 450000;
 
     const senderTxHashRLP = await adminSenderWallet.signTransaction(tx);
-    
     do {
       try {
         txResponse = await (await adminWallet.sendTransactionAsFeePayer(senderTxHashRLP)).wait();
@@ -306,6 +309,15 @@ router.post('/', async (req, res) => {
         ) {
           return createResponse(res, 'BAD_REQUEST', error, requestId);
         }
+
+        if (isRpcRelatedError(sendErr)) {
+          const newProvider = pickDifferentProvider(provider, requestId);
+          if (newProvider) {
+            provider = newProvider;
+            adminWallet = new Wallet(adminAddress, adminPrivateKey, newProvider);
+            adminSenderWallet = new Wallet(adminPrivateKey, newProvider);
+          }
+        }
       }
       attempt++;
     } while (attempt < 5);
@@ -319,12 +331,19 @@ router.post('/', async (req, res) => {
     let waitCount = 0;
     do {
       await new Promise((resolve) => setTimeout(resolve, 1500));
-      console.log('Request ID:'+ requestId + ' - waiting for gasFreeSwapKaiareceipt', waitCount);
+      console.log('Request ID:'+ requestId + ' - waiting for gasFreeSwapKaia receipt', waitCount);
       try {
         receipt = await provider.getTransactionReceipt(txHash);
         if (receipt) break;
       } catch (receiptErr) {
         logError(receiptErr, requestId, 'Getting transaction receipt failed');
+
+        if (isRpcRelatedError(receiptErr)) {
+          const newProvider = pickDifferentProvider(provider, requestId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
       waitCount++;
     } while (waitCount < 15);
