@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { Wallet, parseTransaction, formatKaia } = require('@kaiachain/ethers-ext/v6');
-const { pickProviderFromPool } = require('../utils/rpcProvider');
+const { pickHealthyProvider, pickDifferentProvider, isRpcRelatedError } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
 const {
   createResponse,
@@ -315,7 +315,11 @@ router.post('/', async (req, res) => {
       }
     }
 
-    const provider = pickProviderFromPool();
+    let provider = await pickHealthyProvider(uniqueId);
+    if (!provider) {
+      console.error('Request ID:' + uniqueId + ' - All RPC providers are unavailable');
+      return createResponse(res, 'SERVICE_UNAVAILABLE', 'All RPC providers are currently unavailable, please try again later', uniqueId);
+    }
     const feePayer = new Wallet(
       process.env.ACCOUNT_ADDRESS || '',
       process.env.FEE_PAYER_PRIVATE_KEY || '',
@@ -335,7 +339,13 @@ router.post('/', async (req, res) => {
         console.error('Request ID:'+ uniqueId + ' - [' + sendCnt + ' try] Transaction send failed: sender - ' + sender + ', contract - ' + targetContract);
         console.error('Request ID:'+ uniqueId + ' - Send Error:', e?.error?.message || e?.message || e);
         errorMessage = getCleanErrorMessage(e);
-        // Ignore known transaction errors as requested - skip this check entirely
+
+        if (isRpcRelatedError(e)) {
+          const newProvider = pickDifferentProvider(provider, uniqueId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
       sendCnt++;
     } while (sendCnt < 5);
@@ -357,6 +367,13 @@ router.post('/', async (req, res) => {
         }
       } catch (e) {
         logError(e, uniqueId, 'Getting transaction receipt failed');
+
+        if (isRpcRelatedError(e)) {
+          const newProvider = pickDifferentProvider(provider, uniqueId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
 
       waitCnt++;
