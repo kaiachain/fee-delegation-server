@@ -310,14 +310,15 @@ router.post('/', async (req, res) => {
           return createResponse(res, 'BAD_REQUEST', error, requestId);
         }
 
-        if (isRpcRelatedError(sendErr)) {
-          const newProvider = pickDifferentProvider(provider, requestId);
-          if (newProvider) {
-            provider = newProvider;
-            adminWallet = new Wallet(adminAddress, adminPrivateKey, newProvider);
-            adminSenderWallet = new Wallet(adminPrivateKey, newProvider);
-          }
-        }
+        // TODO: remove this rpc switch for now since we checked before sending the transaction
+        // if (isRpcRelatedError(sendErr)) {
+        //   const newProvider = pickDifferentProvider(provider, requestId);
+        //   if (newProvider) {
+        //     provider = newProvider;
+        //     adminWallet = new Wallet(adminAddress, adminPrivateKey, newProvider);
+        //     adminSenderWallet = new Wallet(adminPrivateKey, newProvider);
+        //   }
+        // }
       }
       attempt++;
     } while (attempt < 5);
@@ -338,12 +339,13 @@ router.post('/', async (req, res) => {
       } catch (receiptErr) {
         logError(receiptErr, requestId, 'Getting transaction receipt failed');
 
-        if (isRpcRelatedError(receiptErr)) {
-          const newProvider = pickDifferentProvider(provider, requestId);
-          if (newProvider) {
-            provider = newProvider;
-          }
-        }
+        // TODO: remove this rpc switch for now since we checked before sending the transaction
+        // if (isRpcRelatedError(receiptErr)) {
+        //   const newProvider = pickDifferentProvider(provider, requestId);
+        //   if (newProvider) {
+        //     provider = newProvider;
+        //   }
+        // }
       }
       waitCount++;
     } while (waitCount < 15);
