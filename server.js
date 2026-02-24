@@ -14,7 +14,7 @@ const handle = app.getRequestHandler();
 const dappsRoutes = require('./backend/routes/dapps');
 const contractsRoutes = require('./backend/routes/contracts');
 const sendersRoutes = require('./backend/routes/senders');
-const balanceRoutes = require('./backend/routes/balance');
+const { balanceRouter: balanceRoutes, balanceV2Router: balanceV2Routes } = require('./backend/routes/balance');
 const apiKeysRoutes = require('./backend/routes/apiKeys');
 const poolRoutes = require('./backend/routes/pool');
 const emailAlertsRoutes = require('./backend/routes/emailAlerts');
@@ -70,11 +70,20 @@ app.prepare().then(() => {
     next();
   });
 
+  server.use('/api/v2/balance', (req, res, next) => {
+    res.header('Access-Control-Allow-Origin', '*');
+    res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Content-Type', 'application/json');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  });
+
   // API Routes (excluding NextAuth which is handled by Next.js)
   server.use('/api/dapps', dappsRoutes);
   server.use('/api/contracts', contractsRoutes);
   server.use('/api/senders', sendersRoutes);
   server.use('/api/balance', balanceRoutes);
+  server.use('/api/v2/balance', balanceV2Routes);
   server.use('/api/api-keys', apiKeysRoutes);
   server.use('/api/pool', poolRoutes);
   server.use('/api/email-alerts', emailAlertsRoutes);
