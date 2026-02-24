@@ -340,12 +340,13 @@ router.post('/', async (req, res) => {
         console.error('Request ID:'+ uniqueId + ' - Send Error:', e?.error?.message || e?.message || e);
         errorMessage = getCleanErrorMessage(e);
 
-        if (isRpcRelatedError(e)) {
-          const newProvider = pickDifferentProvider(provider, uniqueId);
-          if (newProvider) {
-            provider = newProvider;
-          }
-        }
+        // TODO: remove this rpc switch for now since we checked before sending the transaction
+        // if (isRpcRelatedError(e)) {
+        //   const newProvider = pickDifferentProvider(provider, uniqueId);
+        //   if (newProvider) {
+        //     provider = newProvider;
+        //   }
+        // }
       }
       sendCnt++;
     } while (sendCnt < 5);
@@ -368,12 +369,13 @@ router.post('/', async (req, res) => {
       } catch (e) {
         logError(e, uniqueId, 'Getting transaction receipt failed');
 
-        if (isRpcRelatedError(e)) {
-          const newProvider = pickDifferentProvider(provider, uniqueId);
-          if (newProvider) {
-            provider = newProvider;
-          }
-        }
+        // TODO: remove this rpc switch for now since we checked before sending the transaction
+        // if (isRpcRelatedError(e)) {
+        //   const newProvider = pickDifferentProvider(provider, uniqueId);
+        //   if (newProvider) {
+        //     provider = newProvider;
+        //   }
+        // }
       }
 
       waitCnt++;
