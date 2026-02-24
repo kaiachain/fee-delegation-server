@@ -3,6 +3,7 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, isEnoughBalance, checkWhitelistedAndGetDapp, getDappByApiKey } = require('../utils/apiUtils');
+const { formatKaia } = require('@kaiachain/ethers-ext/v6');
 
 // OPTIONS /api/balance - Handle CORS preflight
 router.options('/', async (req, res) => {
@@ -16,7 +17,7 @@ router.options('/', async (req, res) => {
  *     tags: [Balance]
  *     summary: Check DApp balance
  *     description: |
- *       Check if DApp has sufficient balance for fee delegation.
+ *       Check if DApp has sufficient balance for fee delegation and return balance details.
  *       
  *       **Authentication Options:**
  *       - **API Key**: Provide Bearer token to check associated DApp balance
@@ -24,7 +25,11 @@ router.options('/', async (req, res) => {
  *       
  *       **Usage:**
  *       - With API Key: `GET /api/balance` + Authorization header
- *       - With Address: `GET /api/balance?address=0x...` (no auth required for whitelisted addresses)
+ *       - With API Key + Address: `GET /api/balance?address=0x...` + Authorization header
+ *       - With Address only: `GET /api/balance?address=0x...` (no auth required for whitelisted addresses)
+ *       
+ *       **Note:** DApps that have API keys configured require authentication via the API key.
+ *       Address-only access (without API key) only works for DApps that do not have any API keys configured.
  *     security:
  *       - BearerAuth: []
  *       - {}
@@ -32,30 +37,47 @@ router.options('/', async (req, res) => {
  *       - name: address
  *         in: query
  *         description: Contract or sender address to check balance for (required when no API key provided)
- *         required: true
+ *         required: false
  *         schema:
  *           type: string
  *           pattern: '^0x[a-fA-F0-9]{40}$'
- *           example: "0x742d35Cc6634C0532925a3b8D2A4DDDeAe0e4Cd3"
  *     responses:
  *       200:
  *         description: Balance check successful
  *         content:
  *           application/json:
  *             schema:
- *               $ref: '#/components/schemas/BalanceResponse'
+ *               type: object
+ *               properties:
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     isEnough:
+ *                       type: boolean
+ *                       description: Whether the DApp has sufficient balance (> 0.1 KAIA)
+ *                     balance:
+ *                       type: string
+ *                       description: DApp balance in KAIA
+ *                 status:
+ *                   type: boolean
  *             examples:
  *               sufficient_balance:
  *                 summary: Sufficient Balance
  *                 value:
  *                   message: "Request was successful"
- *                   data: true
+ *                   data:
+ *                     isEnough: true
+ *                     balance: "150.5000"
  *                   status: true
  *               insufficient_balance:
  *                 summary: Insufficient Balance
  *                 value:
  *                   message: "Request was successful"
- *                   data: false
+ *                   data:
+ *                     isEnough: false
+ *                     balance: "0.0500"
  *                   status: true
  *       400:
  *         description: Bad request
@@ -64,11 +86,11 @@ router.options('/', async (req, res) => {
  *             schema:
  *               $ref: '#/components/schemas/ErrorResponse'
  *             examples:
- *               invalid_input:
- *                 summary: Invalid Input
+ *               missing_input:
+ *                 summary: Missing API Key and Address
  *                 value:
  *                   message: "Bad request"
- *                   data: "Invalid Input"
+ *                   data: "API key or address is required"
  *                   error: "BAD_REQUEST"
  *                   status: false
  *               invalid_address:
@@ -85,11 +107,11 @@ router.options('/', async (req, res) => {
  *                   data: "Invalid API key"
  *                   error: "BAD_REQUEST"
  *                   status: false
- *               address_not_whitelisted:
- *                 summary: Address Not Whitelisted
+ *               address_not_found:
+ *                 summary: Address Not Found
  *                 value:
  *                   message: "Bad request"
- *                   data: "Address not whitelisted"
+ *                   data: "Address not found. If your DApp uses API keys, please include the API key."
  *                   error: "BAD_REQUEST"
  *                   status: false
  *       404:
@@ -136,10 +158,6 @@ router.get('/', async (req, res) => {
     const apiKey = authHeader?.startsWith("Bearer ")
         ? authHeader.substring(7)
         : null;
-    
-    if(!address) {
-      return createResponse(res, "BAD_REQUEST", "Invalid Input");
-    }
 
     if (address && !ethers.isAddress(address)) {
       return createResponse(res, "BAD_REQUEST", "Invalid address");
@@ -148,7 +166,6 @@ router.get('/', async (req, res) => {
     let dapp;
     let balance = null;
 
-    // Check if API key is present and valid
     if (apiKey) {
       dapp = await getDappByApiKey(apiKey?.toLowerCase() || "");
       if (!dapp) {
@@ -156,15 +173,11 @@ router.get('/', async (req, res) => {
       }
       
       balance = dapp.balance;
-    } else {
-      // If no API key, fall back to contract/sender validation for non-API key DApps
-      if (!address) {
-        return createResponse(res, "BAD_REQUEST", "Address is required");
-      }
+    } else if (address) {
       const { isWhitelisted, dapp: foundDapp } = await checkWhitelistedAndGetDapp(address.toLowerCase(), address.toLowerCase());
 
       if (!isWhitelisted) {
-        return createResponse(res, "BAD_REQUEST", "Address not whitelisted");
+        return createResponse(res, "BAD_REQUEST", "Address not found. If your DApp uses API keys, please include the API key");
       }
       
       if (!foundDapp) {
@@ -173,6 +186,8 @@ router.get('/', async (req, res) => {
       
       dapp = foundDapp;
       balance = dapp.balance;
+    } else {
+      return createResponse(res, "BAD_REQUEST", "API key or address is required");
     }
 
     if (!balance) {
@@ -180,7 +195,8 @@ router.get('/', async (req, res) => {
     }
 
     const hasEnoughBalance = isEnoughBalance(BigInt(balance));
-    return createResponse(res, "SUCCESS", hasEnoughBalance);
+    const balanceInKaia = parseFloat(formatKaia(balance)).toFixed(4);
+    return createResponse(res, "SUCCESS", { isEnough: hasEnoughBalance, balance: balanceInKaia });
   } catch (error) {
     console.error("Balance check error:", error);
     return createResponse(res, "INTERNAL_ERROR", "Failed to check balance");
