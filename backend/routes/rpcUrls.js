@@ -5,10 +5,43 @@ const { createResponse } = require('../utils/apiUtils');
 const { requireSuperAdmin } = require('../middleware/auth');
 const { loadRpcUrls, pingUrl } = require('../utils/rpcProvider');
 
+/**
+ * Mask the last path segment of an RPC URL if it looks like an API key.
+ * A segment is treated as a key if it contains at least one digit
+ * (normal path words like "rpc", "mainnet", "kaia" never do).
+ * e.g. "80bad5e874ec600da69488a10ac5b741b3e00597" → "80b***597"
+ *      "abc123"                                    → "abc***123"
+ *      "rpc"                                       → "rpc" (unchanged)
+ */
+const maskUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    const path = parsed.pathname.replace(/\/+$/, '');
+    const lastSlash = path.lastIndexOf('/');
+    const lastSeg = path.substring(lastSlash + 1);
+
+    if (lastSeg && /\d/.test(lastSeg)) {
+      const masked = lastSeg.length <= 6
+        ? '*'.repeat(lastSeg.length)
+        : lastSeg.slice(0, 3) + '***' + lastSeg.slice(-3);
+      parsed.pathname = path.substring(0, lastSlash + 1) + masked;
+    }
+
+    return parsed.toString().replace(/\/+$/, '');
+  } catch {
+    return url;
+  }
+};
+
+const maskRpcRecord = (record) => ({
+  ...record,
+  url: maskUrl(record.url),
+});
+
 router.get('/', requireSuperAdmin, async (req, res) => {
   try {
     const urls = await prisma.rpcUrl.findMany({ orderBy: { createdAt: 'asc' } });
-    return createResponse(res, 'SUCCESS', urls);
+    return createResponse(res, 'SUCCESS', urls.map(maskRpcRecord));
   } catch (error) {
     console.error('List RPC URLs error:', error);
     return createResponse(res, 'INTERNAL_ERROR', 'Failed to list RPC URLs');
