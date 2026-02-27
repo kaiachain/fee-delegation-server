@@ -340,13 +340,18 @@ router.post('/', async (req, res) => {
         console.error('Request ID:'+ uniqueId + ' - Send Error:', e?.error?.message || e?.message || e);
         errorMessage = getCleanErrorMessage(e);
 
-        // TODO: remove this rpc switch for now since we checked before sending the transaction
-        // if (isRpcRelatedError(e)) {
-        //   const newProvider = pickDifferentProvider(provider, uniqueId);
-        //   if (newProvider) {
-        //     provider = newProvider;
-        //   }
-        // }
+        const errMsg = (e?.error?.message || e?.message || '').toLowerCase();
+        if (errMsg.includes('nonce too low') || errMsg.includes('same nonce in the tx pool') || errMsg.includes('known transaction')) {
+          console.error('Request ID:'+ uniqueId + ' - Non-retryable nonce error, aborting send loop');
+          break;  
+        }
+
+        if (isRpcRelatedError(e)) {
+          const newProvider = await pickDifferentProvider(provider, uniqueId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
       sendCnt++;
     } while (sendCnt < 5);
@@ -369,13 +374,12 @@ router.post('/', async (req, res) => {
       } catch (e) {
         logError(e, uniqueId, 'Getting transaction receipt failed');
 
-        // TODO: remove this rpc switch for now since we checked before sending the transaction
-        // if (isRpcRelatedError(e)) {
-        //   const newProvider = pickDifferentProvider(provider, uniqueId);
-        //   if (newProvider) {
-        //     provider = newProvider;
-        //   }
-        // }
+        if (isRpcRelatedError(e)) {
+          const newProvider = await pickDifferentProvider(provider, uniqueId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
 
       waitCnt++;
