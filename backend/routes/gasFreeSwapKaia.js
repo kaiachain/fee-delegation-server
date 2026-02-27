@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { Wallet, TxType, parseKlay, parseTransaction } = require('@kaiachain/ethers-ext/v6');
+const { Wallet, TxType, parseKlay } = require('@kaiachain/ethers-ext/v6');
 const { pickHealthyProvider, pickDifferentProvider, isRpcRelatedError } = require('../utils/rpcProvider');
 const {
   createResponse,
@@ -300,6 +300,12 @@ router.post('/', async (req, res) => {
         error = getCleanErrorMessage(sendErr);
         const lowerMessage = (error || '').toLowerCase();
         const errorCode = sendErr?.code || sendErr?.error?.code;
+
+        if (lowerMessage.includes('nonce too low') || lowerMessage.includes('same nonce in the tx pool') || lowerMessage.includes('known transaction')) {
+          console.error('Request ID:' + requestId + ' - Non-retryable nonce error, aborting send loop');
+          break;
+        }
+
         if (
           errorCode === 'CALL_EXCEPTION' ||
           errorCode === 'TRANSACTION_REVERTED' ||
@@ -310,15 +316,14 @@ router.post('/', async (req, res) => {
           return createResponse(res, 'BAD_REQUEST', error, requestId);
         }
 
-        // TODO: remove this rpc switch for now since we checked before sending the transaction
-        // if (isRpcRelatedError(sendErr)) {
-        //   const newProvider = pickDifferentProvider(provider, requestId);
-        //   if (newProvider) {
-        //     provider = newProvider;
-        //     adminWallet = new Wallet(adminAddress, adminPrivateKey, newProvider);
-        //     adminSenderWallet = new Wallet(adminPrivateKey, newProvider);
-        //   }
-        // }
+        if (isRpcRelatedError(sendErr)) {
+          const newProvider = await pickDifferentProvider(provider, requestId);
+          if (newProvider) {
+            provider = newProvider;
+            adminWallet = new Wallet(adminAddress, adminPrivateKey, newProvider);
+            adminSenderWallet = new Wallet(adminPrivateKey, newProvider);
+          }
+        }
       }
       attempt++;
     } while (attempt < 5);
@@ -339,13 +344,12 @@ router.post('/', async (req, res) => {
       } catch (receiptErr) {
         logError(receiptErr, requestId, 'Getting transaction receipt failed');
 
-        // TODO: remove this rpc switch for now since we checked before sending the transaction
-        // if (isRpcRelatedError(receiptErr)) {
-        //   const newProvider = pickDifferentProvider(provider, requestId);
-        //   if (newProvider) {
-        //     provider = newProvider;
-        //   }
-        // }
+        if (isRpcRelatedError(receiptErr)) {
+          const newProvider = await pickDifferentProvider(provider, requestId);
+          if (newProvider) {
+            provider = newProvider;
+          }
+        }
       }
       waitCount++;
     } while (waitCount < 15);
