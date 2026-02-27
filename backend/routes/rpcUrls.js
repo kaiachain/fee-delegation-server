@@ -60,6 +60,11 @@ router.post('/', requireSuperAdmin, async (req, res) => {
       return createResponse(res, 'BAD_REQUEST', 'URL must start with http:// or https://');
     }
 
+    const healthy = await pingUrl(trimmed);
+    if (!healthy) {
+      return createResponse(res, 'BAD_REQUEST', 'RPC URL is not reachable or did not respond to health check');
+    }
+
     const exists = await prisma.rpcUrl.findFirst({ where: { url: trimmed } });
     if (exists) {
       return createResponse(res, 'CONFLICT', 'This RPC URL already exists');
