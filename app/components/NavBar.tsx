@@ -160,19 +160,34 @@ export default function NavBar() {
                 </svg>
               </Link>
               {status === "authenticated" && session?.user?.role === "super_admin" && (
-                <Link
-                  className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
-                    pathname === '/users'
-                      ? 'text-white bg-gray-700/50'
-                      : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
-                  }`}
-                  href="/users"
-                  title="Users"
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                  </svg>
-                </Link>
+                <>
+                  <Link
+                    className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
+                      pathname === '/users'
+                        ? 'text-white bg-gray-700/50'
+                        : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
+                    }`}
+                    href="/users"
+                    title="Users"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+                    </svg>
+                  </Link>
+                  <Link
+                    className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
+                      pathname === '/rpc-urls'
+                        ? 'text-white bg-gray-700/50'
+                        : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
+                    }`}
+                    href="/rpc-urls"
+                    title="RPC URLs"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/>
+                    </svg>
+                  </Link>
+                </>
               )}
               {status === "authenticated" && (session?.user?.role === "editor" || session?.user?.role === "super_admin") && (
                 <>

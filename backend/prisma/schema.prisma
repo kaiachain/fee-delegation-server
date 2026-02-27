@@ -166,3 +166,10 @@ model UserDappAccess {
   
   @@unique([userId, dappId])
 }
+
+model RpcUrl {
+  id        String   @id @default(cuid())
+  url       String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

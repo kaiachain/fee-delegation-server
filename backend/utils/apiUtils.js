@@ -74,10 +74,7 @@ const sanitizeTransactionReceipt = (receipt) => {
   return rest;
 };
 
-// Extract hostnames from configured RPC URLs for sanitization
-const rpcHostnames = (process.env.RPC_URL || "").split(",")
-  .map(u => { try { return new URL(u.trim()).hostname; } catch { return null; } })
-  .filter(Boolean);
+const { getRpcHostnames } = require('./rpcProvider');
 
 // Helper function to sanitize error messages by removing RPC URLs
 const sanitizeErrorMessage = (errorMessage, requestId = null) => {
@@ -89,8 +86,8 @@ const sanitizeErrorMessage = (errorMessage, requestId = null) => {
     .replace(/"requestUrl"\s*:\s*"[^"]+"/g, '"requestUrl": "[RPC_URL_HIDDEN]"')
     .replace(/requestUrl[^,}]+/g, 'requestUrl: "[RPC_URL_HIDDEN]"');
 
-  // Remove bare hostnames from configured RPC URLs (e.g. in DNS errors like "ENOTFOUND hostname")
-  for (const hostname of rpcHostnames) {
+  // Remove bare hostnames from DB-sourced RPC URLs (e.g. in DNS errors like "ENOTFOUND hostname")
+  for (const hostname of getRpcHostnames()) {
     sanitized = sanitized.replaceAll(hostname, '[RPC_HOST_HIDDEN]');
   }
     
