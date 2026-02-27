@@ -95,6 +95,7 @@ app.prepare().then(() => {
   // Email auth routes
   server.use('/api/email-auth', require('./backend/routes/emailAuth'));
   server.use('/api/users', require('./backend/routes/users'));
+  server.use('/api/rpc-urls', require('./backend/routes/rpcUrls'));
 
   // Handle all other requests with Next.js
   server.all('*', (req, res) => {
