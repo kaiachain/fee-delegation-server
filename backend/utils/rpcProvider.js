@@ -1,12 +1,9 @@
 const { JsonRpcProvider } =  require("@kaiachain/ethers-ext/v6");
+const { prisma } = require('./prisma');
 
-const rpcUrls = (process.env.RPC_URL || "").split(",").map(u => u.trim()).filter(Boolean);
-const pCount = rpcUrls.length;
-
-// Cached provider pool. Providers are created on first successful use and
-// evicted when they hit RPC errors, so ethers' background network-detection
-// retry loop never persists for broken URLs.
-const providerPool = new Array(pCount).fill(null);
+// Mutable state: loaded from DB on init and refreshed on add/remove
+let rpcUrls = [];
+let providerPool = [];
 
 const getOrCreateProvider = (idx) => {
   if (!providerPool[idx]) {
@@ -15,25 +12,85 @@ const getOrCreateProvider = (idx) => {
   return providerPool[idx];
 };
 
+const EVICT_DELAY_MS = 3000;
 const evictProvider = (provider) => {
-  for (let i = 0; i < pCount; i++) {
+  if (!provider) return;
+  for (let i = 0; i < providerPool.length; i++) {
     if (providerPool[i] === provider) {
       providerPool[i] = null;
-      try { provider.destroy?.(); } catch {}
-      return;
+      break;
     }
   }
+  setTimeout(() => {
+    const stillInPool = providerPool.some(p => p === provider);
+    if (!stillInPool) {
+      try { provider.destroy?.(); } catch {}
+    }
+  }, EVICT_DELAY_MS);
 };
 
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 
-const pickProviderFromPool = () => {
-  if (pCount === 0) throw Error("No available provider");
+/**
+ * Load active RPC URLs from the database.
+ * Preserves providers for URLs that still exist.
+ *
+ * Safety for in-flight requests:
+ * 1. Pool swap is immediate — new requests never pick the removed provider.
+ * 2. Removed providers are destroyed after EVICT_DELAY_MS (3s).
+ * 3. If an in-flight request hits "provider destroyed" during the receipt
+ *    loop, isRpcRelatedError() catches it and pickDifferentProvider()
+ *    switches to another healthy provider seamlessly.
+ */
+const loadRpcUrls = async () => {
+  try {
+    const rows = await prisma.rpcUrl.findMany({ where: { active: true }, orderBy: { createdAt: 'asc' } });
+    const newUrls = rows.map(r => r.url);
 
-  const random = Math.floor(Math.random() * pCount);
-  console.log(rpcUrls[random]);
-  return getOrCreateProvider(random);
+    const oldUrls = rpcUrls;
+    const oldPool = providerPool;
+
+    // Rebuild pool: preserve existing providers for URLs that still exist
+    const newPool = new Array(newUrls.length).fill(null);
+    for (let i = 0; i < newUrls.length; i++) {
+      const oldIdx = oldUrls.indexOf(newUrls[i]);
+      if (oldIdx !== -1 && oldPool[oldIdx]) {
+        newPool[i] = oldPool[oldIdx];
+      }
+    }
+
+    // Swap arrays — new requests use the new pool immediately.
+    rpcUrls = newUrls;
+    providerPool = newPool;
+
+    // Destroy removed providers after EVICT_DELAY_MS.
+    // If an in-flight request is still using it, the "provider destroyed"
+    // error is caught by isRpcRelatedError → pickDifferentProvider.
+    for (let i = 0; i < oldUrls.length; i++) {
+      if (!newUrls.includes(oldUrls[i]) && oldPool[i]) {
+        const provider = oldPool[i];
+        setTimeout(() => {
+          try { provider.destroy?.(); } catch {}
+        }, EVICT_DELAY_MS);
+      }
+    }
+
+    console.log(`RPC provider pool loaded: ${rpcUrls.length} URL(s)`);
+  } catch (error) {
+    console.error('Failed to load RPC URLs from database:', error.message);
+    if (rpcUrls.length === 0) {
+      const envUrls = (process.env.RPC_URL || "").split(",").map(u => u.trim()).filter(Boolean);
+      if (envUrls.length > 0) {
+        console.warn('Falling back to RPC_URL env variable');
+        rpcUrls = envUrls;
+        providerPool = new Array(envUrls.length).fill(null);
+      }
+    }
+  }
 };
+
+// Load on module init
+loadRpcUrls();
 
 const getProviderUrl = (provider) => {
   try {
@@ -62,6 +119,7 @@ const isRpcRelatedError = (error) => {
     message.includes('econnreset') ||
     message.includes('network error') ||
     message.includes('failed to fetch') ||
+    message.includes('provider destroyed') ||
     message.includes('502') ||
     message.includes('503') ||
     message.includes('504')
@@ -71,7 +129,6 @@ const isRpcRelatedError = (error) => {
 /**
  * Ping a URL directly with klay_blockNumber (lowest latency RPC call)
  * without creating a persistent JsonRpcProvider instance.
- * Returns true if the URL responds within the timeout.
  */
 const pingUrl = async (url) => {
   try {
@@ -93,12 +150,11 @@ const pingUrl = async (url) => {
 
 /**
  * Pick a healthy provider from the pool.
- * Pings each URL with a raw fetch (no JsonRpcProvider instantiation) to avoid
- * triggering ethers' background network-detection retry loop on broken URLs.
- * Only creates a JsonRpcProvider for the URL that passes the health check.
+ * Pings each URL with a raw fetch before creating a JsonRpcProvider.
  * Returns null if no providers are healthy.
  */
 const pickHealthyProvider = async (requestId = null) => {
+  const pCount = rpcUrls.length;
   if (pCount === 0) throw Error("No available provider");
 
   const startIdx = Math.floor(Math.random() * pCount);
@@ -124,13 +180,14 @@ const pickHealthyProvider = async (requestId = null) => {
 };
 
 /**
- * Pick a different provider from the pool, excluding the current one.
- * Evicts the current (broken) provider from cache to stop ethers' background retry.
- * Returns null if there's only one provider available.
+ * Pick a different healthy provider from the pool, excluding the current one.
+ * Pings candidate URLs before returning a provider.
+ * When a healthy replacement is found, the old provider is evicted and
+ * destroyed after a delay.
+ * Returns null if no other healthy provider is available.
  */
-const pickDifferentProvider = (currentProvider, requestId = null) => {
-  evictProvider(currentProvider);
-
+const pickDifferentProvider = async (currentProvider, requestId = null) => {
+  const pCount = rpcUrls.length;
   if (pCount <= 1) return null;
 
   const currentUrl = getProviderUrl(currentProvider);
@@ -143,17 +200,64 @@ const pickDifferentProvider = (currentProvider, requestId = null) => {
 
   if (candidates.length === 0) return null;
 
-  const picked = candidates[Math.floor(Math.random() * candidates.length)];
-  if (requestId) {
-    console.log(`Request ID:${requestId} - Switching RPC provider: ${currentUrl} -> ${picked.url}`);
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
   }
-  return getOrCreateProvider(picked.idx);
+
+  for (const candidate of candidates) {
+    const healthy = await pingUrl(candidate.url);
+    if (healthy) {
+      if (requestId) {
+        console.log(`Request ID:${requestId} - Switching RPC provider: ${currentUrl} -> ${candidate.url}`);
+      }
+      evictProvider(currentProvider);
+      return getOrCreateProvider(candidate.idx);
+    }
+    if (requestId) {
+      console.warn(`Request ID:${requestId} - Candidate provider health check failed: ${candidate.url}`);
+    }
+  }
+
+  if (requestId) {
+    console.warn(`Request ID:${requestId} - No healthy alternative provider found, staying with current`);
+  }
+  return null;
+};
+
+/**
+ * TEST ONLY: Create a provider and track it in the pool for proper eviction.
+ */
+const injectTestProvider = (url) => {
+  const provider = new JsonRpcProvider(url);
+  providerPool.push(provider);
+  return provider;
+};
+
+/**
+ * TEST ONLY: Re-insert an existing provider back into the pool.
+ */
+const reinjectTestProvider = (provider) => {
+  const alreadyInPool = providerPool.some(p => p === provider);
+  if (!alreadyInPool) {
+    providerPool.push(provider);
+  }
+};
+
+const getRpcHostnames = () => {
+  return rpcUrls
+    .map(u => { try { return new URL(u).hostname; } catch { return null; } })
+    .filter(Boolean);
 };
 
 module.exports = {
-  pickProviderFromPool,
+  loadRpcUrls,
   pickHealthyProvider,
   pickDifferentProvider,
   isRpcRelatedError,
   getProviderUrl,
+  getRpcHostnames,
+  pingUrl,
+  injectTestProvider,
+  reinjectTestProvider,
 };
