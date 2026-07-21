@@ -3,6 +3,7 @@ import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import { Session } from "next-auth";
 import jwt from "jsonwebtoken";
+import { isGoogleWhitelistEmail } from "../backend/utils/googleWhitelist";
 
 export const authOptions = {
   providers: [
@@ -50,9 +51,8 @@ export const authOptions = {
     async signIn({ user, account }: { user: any; account: any }) {
       // Additional restriction for Google sign-in to whitelist only
       if (account?.provider === "google") {
-        const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
         const email = (user?.email as string) || "";
-        if (!admins.includes(email)) {
+        if (!isGoogleWhitelistEmail(email)) {
           // Block unauthorized Google sign-ins
           throw new Error("Access denied: Email not in whitelist");
         }
@@ -107,8 +107,9 @@ export const authOptions = {
         session.user.role = tokenRole as "editor" | "viewer" | "super_admin";
       } else {
         // Fallback: Google whitelist -> super_admin, else viewer
-        const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
-        session.user.role = admins.includes(session.user.email || "") ? "super_admin" : "viewer";
+        session.user.role = isGoogleWhitelistEmail(session.user.email || "")
+          ? "super_admin"
+          : "viewer";
       }
 
       // Compute sessionExpired using idTokenExpires
