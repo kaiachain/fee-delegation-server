@@ -4,6 +4,9 @@ if(!dev) {
   require('dotenv').config({ path: '.env.production' });
 }
 
+const { assertStartupEnv } = require('./backend/utils/startupEnvGate');
+assertStartupEnv();
+
 const express = require('express');
 const next = require('next');
 const { mountApiRoutes } = require('./backend/createApiApp');
