@@ -1,4 +1,5 @@
 const { OAuth2Client } = require("google-auth-library");
+const { isGoogleWhitelistEmail } = require("./googleWhitelist");
 
 const client = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
@@ -15,9 +16,7 @@ async function verify(idToken) {
       throw new Error("Invalid token");
     }
 
-    const admins = (process.env.GOOGLE_WHITELIST || "").split(",");
-
-    if (!admins.includes(payload.email)) {
+    if (!isGoogleWhitelistEmail(payload.email)) {
       return { ...payload, role: "viewer" };
     }
 
@@ -31,4 +30,4 @@ async function verify(idToken) {
   }
 }
 
-module.exports = { verify }; 
+module.exports = { verify };
