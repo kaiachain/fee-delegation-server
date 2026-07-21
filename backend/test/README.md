@@ -8,7 +8,7 @@ Express API routes are exercised with [supertest](https://github.com/ladjs/super
 npm test
 ```
 
-Requires `prisma generate` (run once after clone or schema change):
+`npm test` runs `prisma db push` + `prisma generate` from `backend/prisma/schema.test.prisma` (SQLite). For production MySQL work, run:
 
 ```bash
 npm run db:generate
@@ -63,7 +63,7 @@ npm run db:generate
 |------|------|
 | `helpers/app.js` | `createTestAgent()` — supertest bound to `createApiApp()` |
 | `helpers/env.js` | `withEnv(overrides, fn)` — temporary `process.env` |
-| `globalSetup.js` | Creates temp SQLite DB + `prisma db push` |
+| `globalSetup.js` | Creates temp SQLite DB + `prisma db push` via `schema.test.prisma` |
 | `setupAfterEnv.js` | Sets `DATABASE_URL`, `NODE_ENV=test`, default `NETWORK=testnet` |
 
 Production boot (`server.js`) and tests share the same route wiring via `backend/createApiApp.js`. Tests do **not** start Next.js or call `listen()`; supertest invokes the Express app in-process.
