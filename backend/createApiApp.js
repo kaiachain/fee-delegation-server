@@ -46,6 +46,7 @@ function mountApiRoutes(server) {
   server.use('/api/v2/balance', (req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.header('Content-Type', 'application/json');
     res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     next();
   });
