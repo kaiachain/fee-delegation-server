@@ -1,6 +1,30 @@
 const { verify } = require('../utils/verifyToken');
 const { verifyEmailJwt } = require('../utils/passwordUtils');
 const { createResponse } = require('../utils/apiUtils');
+const { prisma } = require('../utils/prisma');
+
+function normalizeDbRole(role) {
+  return (role || 'VIEWER').toString().toLowerCase();
+}
+
+async function resolveCredentialsUser(payload) {
+  const user = payload.sub
+    ? await prisma.user.findUnique({ where: { id: payload.sub } })
+    : payload.email
+      ? await prisma.user.findFirst({ where: { email: payload.email.toLowerCase() } })
+      : null;
+
+  if (!user || !user.isActive) {
+    throw new Error('Invalid or inactive user');
+  }
+
+  return {
+    role: normalizeDbRole(user.role),
+    email: user.email,
+    provider: 'credentials',
+    id: user.id,
+  };
+}
 
 /**
  * Helper function to extract and verify authentication token
@@ -22,10 +46,11 @@ const verifyAuthToken = async (token) => {
     // Try email JWT first for JWT tokens
     try {
       const payload = verifyEmailJwt(token);
-      role = payload.role || 'viewer';
-      email = payload.email;
-      provider = 'credentials';
-    } catch (_) {
+      return await resolveCredentialsUser(payload);
+    } catch (error) {
+      if (error.message === 'Invalid or inactive user') {
+        throw error;
+      }
       // Fallback to Google verification
       const google = await verify(token);
       role = google.role || 'viewer';
