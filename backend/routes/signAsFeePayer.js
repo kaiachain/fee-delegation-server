@@ -11,11 +11,15 @@ const {
   getCleanErrorMessage,
   jsonStringifySafe,
   checkWhitelistedAndGetDapp,
-  isEnoughBalance,
   validateSwapTransaction,
   getDappByApiKey,
   sanitizeTransactionReceipt,
 } = require('../utils/apiUtils');
+const {
+  estimateTxFeeWei,
+  reserveDappBalance,
+  releaseDappBalance,
+} = require('../utils/balanceReserve');
 
 const SETTLEMENT_ALERT_CACHE = new Map();
 const SETTLEMENT_ALERT_TTL_MS = process.env.NETWORK === 'mainnet' ? 24 * 60 * 60 * 1000 : 3 * 60 * 1000; // 24 hours for mainnet, 3 mins for testnet
@@ -184,6 +188,24 @@ router.options('/', async (req, res) => {
  */
 router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
   const uniqueId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  let reservedWei = null;
+  let releaseReservation = false;
+  let dappForRelease = null;
+
+  const releaseReservedBalance = async () => {
+    if (!releaseReservation || !reservedWei || !dappForRelease) {
+      return;
+    }
+
+    releaseReservation = false;
+    try {
+      await releaseDappBalance(dappForRelease.id, reservedWei);
+    } catch (releaseError) {
+      releaseReservation = true;
+      logError(releaseError, uniqueId, 'Failed to release DApp balance reservation');
+    }
+  };
+
   try {
     const { userSignedTx } = req.body || {};
 
@@ -292,10 +314,17 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
         return createResponse(res, 'BAD_REQUEST', 'DApp is inactive. Please contact the administrator to activate the DApp.', uniqueId);
       }
 
-      if (!isEnoughBalance(BigInt(dapp.balance || '0'))) {
+      const feeEstimate = estimateTxFeeWei(tx);
+      const reserveResult = await reserveDappBalance(dapp.id, feeEstimate);
+      if (!reserveResult.ok) {
         console.error('Request ID:'+ uniqueId + ' - Insufficient balance in fee delegation server, please contact the administrator for ' + dapp.name + dapp.id);
         return createResponse(res, 'BAD_REQUEST', 'Insufficient balance in fee delegation server, please contact the administrator.', uniqueId);
       }
+
+      reservedWei = reserveResult.reservedWei;
+      releaseReservation = true;
+      dappForRelease = dapp;
+      dapp.balance = reserveResult.balanceAfterReserve;
 
       // Check if the Dapp has a termination date
       if (dapp.terminationDate) {
@@ -311,6 +340,7 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
 
         if (kstNow >= nextDayAfterTermination) {
           console.error('Request ID:'+ uniqueId + ' - DApp is terminated. Please contact the administrator to activate the DApp.');
+          await releaseReservedBalance();
           return createResponse(res, 'BAD_REQUEST', 'DApp is terminated. Please contact the administrator to activate the DApp.', uniqueId);
         }
       }
@@ -319,6 +349,7 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
     let provider = await pickHealthyProvider(uniqueId);
     if (!provider) {
       console.error('Request ID:' + uniqueId + ' - All RPC providers are unavailable');
+      await releaseReservedBalance();
       return createResponse(res, 'SERVICE_UNAVAILABLE', 'All RPC providers are currently unavailable, please try again later', uniqueId);
     }
     const feePayer = new Wallet(
@@ -359,8 +390,11 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
 
     if (!txHash) {
       console.error('Request ID:'+ uniqueId + ' - Sending transaction was failed after 5 try, network is busy. Error message: ' + errorMessage);
+      await releaseReservedBalance();
       return createResponse(res, 'INTERNAL_ERROR', `Sending transaction was failed after 5 try, network is busy. Error message: ${sanitizeErrorMessage(errorMessage)}`, uniqueId);
     }
+
+    releaseReservation = false;
 
     let receipt;
     let waitCnt = 0;
@@ -388,15 +422,19 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
 
     if (!receipt) {
       console.error('Request ID:'+ uniqueId + ' - Transaction was failed');
+      releaseReservation = true;
+      await releaseReservedBalance();
       return createResponse(res, 'INTERNAL_ERROR', 'Transaction was failed', uniqueId);
     }
+
+    releaseReservation = false;
 
     console.log('Request ID:' + uniqueId + ' - Settlement started');
     targetContract = (receipt.to || tx.to || '').toLowerCase();
     sender = (receipt.from || tx.from || '').toLowerCase();
     let settlementSuccess = false;
     try {
-      await settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId });
+      await settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId, reservedWei });
       settlementSuccess = true;
     } catch (error) {
       logError(error, uniqueId, 'Settlement failed');
@@ -420,7 +458,10 @@ router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
   } catch (error) {
     // Log the main error cleanly
     logError(error, uniqueId, 'Main request processing failed');
+    await releaseReservedBalance();
     return createResponse(res, 'INTERNAL_ERROR', getCleanErrorMessage(error), uniqueId);
+  } finally {
+    await releaseReservedBalance();
   }
 });
 
@@ -430,7 +471,7 @@ function safeAddBigInt(current, addition) {
   return currentValue + additionValue;
 }
 
-async function settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId }) {
+async function settlement({ dapp, receipt, targetContract, sender, txHash, uniqueId, reservedWei = null }) {
   if (process.env.NETWORK !== 'mainnet') {
     return;
   }
@@ -490,7 +531,8 @@ async function settlement({ dapp, receipt, targetContract, sender, txHash, uniqu
         throw new Error(`DApp ${dapp.id} not found during settlement`);
       }
 
-      const nextBalance = (BigInt(currentSnapshot.balance) - usedFee).toString();
+      const reservedAmount = reservedWei ? BigInt(reservedWei) : 0n;
+      const nextBalance = (BigInt(currentSnapshot.balance) + reservedAmount - usedFee).toString();
       const nextTotalUsed = (BigInt(currentSnapshot.totalUsed) + usedFee).toString();
 
       await tx.dApp.update({
