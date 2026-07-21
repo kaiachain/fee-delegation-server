@@ -7,6 +7,7 @@ const {
   getCleanErrorMessage,
   checkContractExistsForNoApiKeyDapps,
   checkSenderExistsForNoApiKeyDapps,
+  formatApiKeyForList,
 } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin } = require('../middleware/auth');
 
@@ -417,6 +418,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 
       return createResponse(res, "SUCCESS", {
         ...completeDapp,
+        apiKeys: completeDapp.apiKeys?.map(formatApiKeyForList) || [],
         emailAlerts: completeDapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
@@ -483,6 +485,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 
       return createResponse(res, "SUCCESS", {
         ...dapp,
+        apiKeys: dapp.apiKeys?.map(formatApiKeyForList) || [],
         emailAlerts: dapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
@@ -609,6 +612,7 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
 
       return {
         ...dapp,
+        apiKeys: dapp.apiKeys?.map(formatApiKeyForList) || [],
         emailAlerts: dapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold

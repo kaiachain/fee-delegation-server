@@ -531,6 +531,25 @@ const checkSenderExistsForApiKeyDapps = async (address) => {
   return existingSender;
 };
 
+const API_KEY_VISIBLE_PREFIX_LENGTH = 12;
+
+const redactApiKeySecret = (key) => {
+  if (!key || typeof key !== 'string') {
+    return key;
+  }
+
+  if (key.length <= API_KEY_VISIBLE_PREFIX_LENGTH) {
+    return key;
+  }
+
+  return `${key.slice(0, API_KEY_VISIBLE_PREFIX_LENGTH)}...`;
+};
+
+const formatApiKeyForList = (apiKey) => ({
+  ...apiKey,
+  key: redactApiKeySecret(apiKey.key),
+});
+
 const getDappByApiKey = async (apiKey) => {
   if (!apiKey) {
     return null;
@@ -691,6 +710,8 @@ module.exports = {
   checkContractExistsForApiKeyDapps,
   checkSenderExistsForApiKeyDapps,
   getDappByApiKey,
+  redactApiKeySecret,
+  formatApiKeyForList,
   getUserAccessibleDappIds,
   applyDappAccessFilter,
   hasUserDappAccess,
