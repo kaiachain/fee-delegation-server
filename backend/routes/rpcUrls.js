@@ -4,6 +4,7 @@ const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
 const { requireSuperAdmin } = require('../middleware/auth');
 const { loadRpcUrls, pingUrl } = require('../utils/rpcProvider');
+const { getRpcUrlValidationError } = require('../utils/rpcUrlValidation');
 
 /**
  * Mask the last path segment of an RPC URL if it looks like an API key.
@@ -56,8 +57,9 @@ router.post('/', requireSuperAdmin, async (req, res) => {
     }
 
     const trimmed = url.trim();
-    if (!trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
-      return createResponse(res, 'BAD_REQUEST', 'URL must start with http:// or https://');
+    const validationError = getRpcUrlValidationError(trimmed);
+    if (validationError) {
+      return createResponse(res, 'BAD_REQUEST', validationError);
     }
 
     if (process.env.NETWORK === 'mainnet') {
@@ -128,6 +130,11 @@ router.post('/:id/ping', requireSuperAdmin, async (req, res) => {
     const rpcUrl = await prisma.rpcUrl.findUnique({ where: { id } });
     if (!rpcUrl) {
       return createResponse(res, 'NOT_FOUND', 'RPC URL not found');
+    }
+
+    const validationError = getRpcUrlValidationError(rpcUrl.url);
+    if (validationError) {
+      return createResponse(res, 'BAD_REQUEST', validationError);
     }
 
     const start = Date.now();
