@@ -16,14 +16,22 @@ export const authOptions = {
       credentials: {
         email: { label: "Email", type: "text" },
         password: { label: "Password", type: "password" },
+        recaptchaToken: { label: "reCAPTCHA", type: "text" },
       },
       async authorize(credentials) {
         try {
           const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
+          const body: Record<string, string | undefined> = {
+            email: credentials?.email,
+            password: credentials?.password,
+          };
+          if (credentials?.recaptchaToken) {
+            body.recaptchaToken = credentials.recaptchaToken;
+          }
           const res = await fetch(`${API_URL}/email-auth/login`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: credentials?.email, password: credentials?.password }),
+            body: JSON.stringify(body),
           });
           const data = await res.json();
           if (!res.ok || !data?.status) {

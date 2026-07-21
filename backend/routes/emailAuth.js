@@ -7,10 +7,11 @@ const { sendPasswordResetEmail } = require('../utils/emailService');
 const { rateLimit } = require('../middleware/rateLimiting');
 const { validateEmail, validatePassword } = require('../middleware/validation');
 const { decodePasswords } = require('../middleware/passwordDecryption');
+const { validateLoginRecaptcha } = require('../middleware/recaptcha');
 const { isValidEmail } = require('../utils/emailValidation');
 
 // POST /api/email-auth/login
-router.post('/login', rateLimit({ name: 'login', max: 10, windowMs: 60_000 }), decodePasswords, validateEmail, validatePassword, async (req, res) => {
+router.post('/login', rateLimit({ name: 'login', max: 10, windowMs: 60_000 }), decodePasswords, validateEmail, validatePassword, validateLoginRecaptcha, async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!isValidEmail(email) || !password) {

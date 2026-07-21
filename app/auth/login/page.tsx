@@ -38,26 +38,12 @@ export default function LoginPage() {
     setLoading(true);
     setError(null);
     try {
-      // Verify reCAPTCHA if site key is configured
+      let recaptchaToken: string | undefined;
       if (siteKey && recaptchaRef.current) {
-        const recaptchaToken = recaptchaRef.current.getValue();
+        recaptchaToken = recaptchaRef.current.getValue() || undefined;
         if (!recaptchaToken) {
           setError("Please complete the reCAPTCHA");
           setLoading(false);
-          return;
-        }
-        
-        // Verify reCAPTCHA on server
-        const recaptchaRes = await fetch('/api/verify-recaptcha', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: recaptchaToken }),
-        });
-        
-        if (!recaptchaRes.ok) {
-          setError("reCAPTCHA verification failed");
-          setLoading(false);
-          recaptchaRef.current.reset();
           return;
         }
       }
@@ -69,6 +55,7 @@ export default function LoginPage() {
         redirect: false,
         email,
         password: encodedPassword,
+        recaptchaToken,
       });
       if (res?.error) {
         setError("Invalid email or password");

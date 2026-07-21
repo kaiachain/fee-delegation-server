@@ -11,8 +11,12 @@ export interface RecaptchaResponse {
 
 export async function verifyRecaptcha(token: string): Promise<boolean> {
   if (!process.env.RECAPTCHA_SECRET_KEY) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error('RECAPTCHA_SECRET_KEY not configured in production');
+      return false;
+    }
     console.warn('RECAPTCHA_SECRET_KEY not configured');
-    return true; // Allow through if not configured (for development)
+    return true; // Allow through if not configured (development only)
   }
 
   if (!token) {
