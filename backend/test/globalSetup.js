@@ -15,9 +15,13 @@ module.exports = async () => {
   fs.writeFileSync(metaPath, JSON.stringify({ databaseUrl, dbPath }));
 
   const repoRoot = path.join(__dirname, '../..');
-  execSync('npx prisma db push --schema=./backend/prisma/schema.prisma --skip-generate', {
+  const testSchema = './backend/prisma/schema.test.prisma';
+  const env = { ...process.env, DATABASE_URL: databaseUrl };
+
+  // Test harness uses SQLite via schema.test.prisma; production schema.prisma stays MySQL.
+  execSync(`npx prisma db push --schema=${testSchema}`, {
     cwd: repoRoot,
-    env: { ...process.env, DATABASE_URL: databaseUrl },
+    env,
     stdio: 'pipe',
   });
 };
