@@ -2,17 +2,39 @@ const { createTestAgent } = require('./helpers/app');
 const { prisma } = require('../utils/prisma');
 const { signEmailJwt } = require('../utils/passwordUtils');
 
-function editorAuthHeader() {
-  const token = signEmailJwt({ email: 'editor@test.com', role: 'editor' });
-  return { Authorization: `Bearer ${token}` };
+async function createTestUser(overrides = {}) {
+  return prisma.user.create({
+    data: {
+      email: 'editor@test.com',
+      firstName: 'Test',
+      lastName: 'User',
+      role: 'EDITOR',
+      isActive: true,
+      createdBy: 'test',
+      ...overrides,
+    },
+  });
+}
+
+function bearerTokenFor(user, jwtRoleOverride) {
+  const role = jwtRoleOverride ?? (user.role || 'EDITOR').toString().toLowerCase();
+  return signEmailJwt({ sub: user.id, email: user.email, role });
 }
 
 describe('API key secret hygiene', () => {
   let dappId;
+  let editorUser;
+
+  function editorAuthHeader() {
+    return { Authorization: `Bearer ${bearerTokenFor(editorUser)}` };
+  }
 
   beforeEach(async () => {
     await prisma.apiKey.deleteMany();
     await prisma.dApp.deleteMany();
+    await prisma.user.deleteMany();
+
+    editorUser = await createTestUser({ role: 'EDITOR' });
 
     const dapp = await prisma.dApp.create({
       data: {
