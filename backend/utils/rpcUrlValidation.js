@@ -1,4 +1,5 @@
 const { isIP } = require('node:net');
+const dns = require('node:dns').promises;
 
 const BLOCKED_HOSTNAMES = new Set([
   'localhost',
@@ -10,6 +11,7 @@ const SCHEME_ERROR = 'URL must use http:// or https://';
 const BLOCKED_DESTINATION_ERROR =
   'RPC URL must not target private, loopback, link-local, or cloud metadata addresses';
 const INVALID_URL_ERROR = 'Invalid RPC URL';
+const DNS_RESOLUTION_ERROR = 'RPC URL hostname could not be resolved';
 
 function ipv4ToInt(ip) {
   return ip.split('.').reduce((acc, oct) => (acc << 8) + Number(oct), 0) >>> 0;
@@ -42,10 +44,17 @@ function isPrivateOrSpecialIpv6(ip) {
   if (normalized.startsWith('fc') || normalized.startsWith('fd')) {
     return true;
   }
-  // IPv4-mapped IPv6
-  const v4Mapped = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (v4Mapped) {
-    return isPrivateOrSpecialIpv4(v4Mapped[1]);
+  // IPv4-mapped IPv6 — dotted form (::ffff:127.0.0.1) or hex (::ffff:7f00:1)
+  const v4MappedDotted = normalized.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (v4MappedDotted) {
+    return isPrivateOrSpecialIpv4(v4MappedDotted[1]);
+  }
+  const v4MappedHex = normalized.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (v4MappedHex) {
+    const hi = parseInt(v4MappedHex[1], 16);
+    const lo = parseInt(v4MappedHex[2], 16);
+    const dotted = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    return isPrivateOrSpecialIpv4(dotted);
   }
   return false;
 }
@@ -65,14 +74,18 @@ function normalizeHostname(hostname) {
   return hostname;
 }
 
-function isBlockedHost(hostname) {
-  const host = normalizeHostname(hostname);
-  if (isBlockedHostname(host)) return true;
-
+function isBlockedIpAddress(address) {
+  const host = normalizeHostname(address);
   const ipVersion = isIP(host);
   if (ipVersion === 4) return isPrivateOrSpecialIpv4(host);
   if (ipVersion === 6) return isPrivateOrSpecialIpv6(host);
   return false;
+}
+
+function isBlockedHost(hostname) {
+  const host = normalizeHostname(hostname);
+  if (isBlockedHostname(host)) return true;
+  return isBlockedIpAddress(host);
 }
 
 function getRpcUrlValidationError(rawUrl) {
@@ -107,9 +120,77 @@ function getRpcUrlValidationError(rawUrl) {
   return null;
 }
 
+async function defaultLookup(hostname) {
+  return dns.lookup(hostname, { all: true, verbatim: true });
+}
+
+/**
+ * Sync URL shape checks plus DNS resolution of the hostname.
+ * Rejects if any resolved address is private/loopback/link-local/metadata.
+ */
+async function assertRpcUrlSafeForOutbound(rawUrl, options = {}) {
+  const syncError = getRpcUrlValidationError(rawUrl);
+  if (syncError) {
+    return syncError;
+  }
+
+  const parsed = new URL(String(rawUrl).trim());
+  const hostname = normalizeHostname(parsed.hostname);
+
+  // Literal IPs are already covered by the sync check.
+  if (isIP(hostname)) {
+    return null;
+  }
+
+  const lookup = options.lookup || defaultLookup;
+  let addresses;
+  try {
+    addresses = await lookup(hostname);
+  } catch {
+    return DNS_RESOLUTION_ERROR;
+  }
+
+  const list = Array.isArray(addresses) ? addresses : [addresses];
+  if (list.length === 0) {
+    return DNS_RESOLUTION_ERROR;
+  }
+
+  for (const entry of list) {
+    const address = typeof entry === 'string' ? entry : entry.address;
+    if (!address || isBlockedIpAddress(address) || isBlockedHostname(address)) {
+      return BLOCKED_DESTINATION_ERROR;
+    }
+  }
+
+  return null;
+}
+
+async function filterSafeRpcUrls(urls, options = {}) {
+  const safe = [];
+  for (const url of urls) {
+    const err = await assertRpcUrlSafeForOutbound(url, options);
+    if (err) {
+      let host = 'invalid';
+      try {
+        host = new URL(String(url).trim()).hostname;
+      } catch {
+        // ignore parse errors for logging
+      }
+      console.warn(`Skipping unsafe RPC URL (${host}): ${err}`);
+      continue;
+    }
+    safe.push(url);
+  }
+  return safe;
+}
+
 module.exports = {
   getRpcUrlValidationError,
+  assertRpcUrlSafeForOutbound,
+  filterSafeRpcUrls,
+  isBlockedIpAddress,
   SCHEME_ERROR,
   BLOCKED_DESTINATION_ERROR,
   INVALID_URL_ERROR,
+  DNS_RESOLUTION_ERROR,
 };
