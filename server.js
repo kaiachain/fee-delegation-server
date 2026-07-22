@@ -1,8 +1,6 @@
 const dev = process.env.NODE_ENV !== 'production';
 
-if(!dev) {
-  require('dotenv').config({ path: '.env.production' });
-}
+require('dotenv').config({ path: dev ? '.env' : '.env.production' });
 
 const { assertStartupEnv } = require('./backend/utils/startupEnvGate');
 assertStartupEnv();
