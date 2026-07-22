@@ -46,6 +46,11 @@ describe('RPC URL SSRF validation (unit)', () => {
     expect(getRpcUrlValidationError('http://[::1]:8545')).toMatch(/private|loopback|not allowed/i);
   });
 
+  it('rejects IPv4-mapped IPv6 loopback forms', () => {
+    expect(getRpcUrlValidationError('http://[::ffff:127.0.0.1]/')).toMatch(/private|loopback|not allowed/i);
+    expect(getRpcUrlValidationError('http://[::ffff:7f00:1]/')).toMatch(/private|loopback|not allowed/i);
+  });
+
   it('rejects private IPv4 ranges', () => {
     expect(getRpcUrlValidationError('https://10.0.0.1/rpc')).toMatch(/private|loopback|not allowed/i);
     expect(getRpcUrlValidationError('https://172.16.0.1/rpc')).toMatch(/private|loopback|not allowed/i);
@@ -60,6 +65,77 @@ describe('RPC URL SSRF validation (unit)', () => {
   it('rejects malformed URLs', () => {
     expect(getRpcUrlValidationError('not-a-url')).toBeTruthy();
     expect(getRpcUrlValidationError('')).toBeTruthy();
+  });
+});
+
+describe('RPC URL outbound safety (resolve-time + redirects)', () => {
+  const {
+    assertRpcUrlSafeForOutbound,
+    filterSafeRpcUrls,
+  } = require('../utils/rpcUrlValidation');
+
+  it('assertRpcUrlSafeForOutbound rejects hostnames that resolve to loopback', async () => {
+    const lookup = jest.fn(async () => [{ address: '127.0.0.1', family: 4 }]);
+    const err = await assertRpcUrlSafeForOutbound('http://127.0.0.1.nip.io/rpc', { lookup });
+    expect(err).toMatch(/private|loopback|not allowed/i);
+    expect(lookup).toHaveBeenCalled();
+  });
+
+  it('assertRpcUrlSafeForOutbound accepts hostnames that resolve to public IPs', async () => {
+    const lookup = jest.fn(async () => [{ address: '203.0.113.10', family: 4 }]);
+    const err = await assertRpcUrlSafeForOutbound('https://public-rpc.example.com', { lookup });
+    expect(err).toBeNull();
+  });
+
+  it('filterSafeRpcUrls drops sync-unsafe URLs and keeps public ones', async () => {
+    const lookup = jest.fn(async () => [{ address: '203.0.113.10', family: 4 }]);
+    const filtered = await filterSafeRpcUrls(
+      [
+        'https://public-rpc.example.com',
+        'http://127.0.0.1:8545',
+        'http://[::ffff:7f00:1]/',
+      ],
+      { lookup }
+    );
+    expect(filtered).toEqual(['https://public-rpc.example.com']);
+  });
+
+  it('filterSafeRpcUrls drops URLs whose DNS resolves to private IPs', async () => {
+    const lookup = jest.fn(async (hostname) => {
+      if (hostname === 'evil.example.com') {
+        return [{ address: '169.254.169.254', family: 4 }];
+      }
+      return [{ address: '203.0.113.10', family: 4 }];
+    });
+    const filtered = await filterSafeRpcUrls(
+      ['https://evil.example.com', 'https://ok.example.com'],
+      { lookup }
+    );
+    expect(filtered).toEqual(['https://ok.example.com']);
+  });
+});
+
+describe('pingUrl redirect policy', () => {
+  const { pingUrl } = require('../utils/rpcProvider');
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('treats HTTP redirects as unhealthy', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 302,
+      headers: { get: () => 'http://169.254.169.254/' },
+      json: async () => ({}),
+    });
+
+    const healthy = await pingUrl('https://203.0.113.10/v1');
+    expect(healthy).toBe(false);
+    expect(global.fetch).toHaveBeenCalledWith(
+      'https://203.0.113.10/v1',
+      expect.objectContaining({ redirect: 'manual' })
+    );
   });
 });
 
@@ -101,11 +177,11 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
     const res = await agent
       .post('/api/rpc-urls')
       .set(superAdminAuthHeader(superAdmin))
-      .send({ url: 'https://public-rpc.example.com/v1' });
+      .send({ url: 'https://example.com/rpc' });
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe(true);
-    expect(res.body.data.url).toBe('https://public-rpc.example.com/v1');
+    expect(res.body.data.url).toBe('https://example.com/rpc');
   });
 
   it('POST /api/rpc-urls/:id/ping rejects private targets stored in DB', async () => {
@@ -125,7 +201,7 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
 
   it('POST /api/rpc-urls/:id/ping allows public https URLs', async () => {
     const stored = await prisma.rpcUrl.create({
-      data: { url: 'https://public-rpc.example.com/v1' },
+      data: { url: 'https://example.com/rpc' },
     });
 
     const agent = createTestAgent();

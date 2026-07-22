@@ -4,7 +4,7 @@ const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
 const { requireSuperAdmin } = require('../middleware/auth');
 const { loadRpcUrls, pingUrl } = require('../utils/rpcProvider');
-const { getRpcUrlValidationError } = require('../utils/rpcUrlValidation');
+const { assertRpcUrlSafeForOutbound } = require('../utils/rpcUrlValidation');
 
 /**
  * Mask the last path segment of an RPC URL if it looks like an API key.
@@ -57,7 +57,7 @@ router.post('/', requireSuperAdmin, async (req, res) => {
     }
 
     const trimmed = url.trim();
-    const validationError = getRpcUrlValidationError(trimmed);
+    const validationError = await assertRpcUrlSafeForOutbound(trimmed);
     if (validationError) {
       return createResponse(res, 'BAD_REQUEST', validationError);
     }
@@ -132,7 +132,7 @@ router.post('/:id/ping', requireSuperAdmin, async (req, res) => {
       return createResponse(res, 'NOT_FOUND', 'RPC URL not found');
     }
 
-    const validationError = getRpcUrlValidationError(rpcUrl.url);
+    const validationError = await assertRpcUrlSafeForOutbound(rpcUrl.url);
     if (validationError) {
       return createResponse(res, 'BAD_REQUEST', validationError);
     }
