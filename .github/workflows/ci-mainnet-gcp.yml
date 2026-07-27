@@ -1,0 +1,62 @@
+name: production-mainnet-fee-delegation-CI-GCP
+on:
+  push:
+    branches:
+      - main
+
+env:
+  PROJECT_ID: "kaia-cluster-prod"
+  SERVICE_ACCOUNT: "prod-gha-fee-delegation-server@kaia-cluster-prod.iam.gserviceaccount.com"
+  WORKLOAD_IDENTITY_PROVIDER: "projects/380808041996/locations/global/workloadIdentityPools/kaia-cluster-prod/providers/fee-delegation-server-gha-prvdr"
+  AR_REPO_LOCATION: "asia-northeast3"
+  AR_URL: "asia-northeast3-docker.pkg.dev/kaia-cluster-prod/prod-fee-delegation-server"
+
+jobs:
+  build-and-push-image-to-artifact-registry:
+    permissions:
+      id-token: write
+      contents: read
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout source code
+        uses: actions/checkout@v3
+
+      - name: Google Auth
+        id: auth
+        uses: 'google-github-actions/auth@v2'
+        with:
+          token_format: 'access_token'
+          project_id: ${{ env.PROJECT_ID }}
+          service_account: ${{ env.SERVICE_ACCOUNT }}
+          workload_identity_provider: ${{ env.WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Docker Auth
+        id: docker-auth
+        uses: 'docker/login-action@v1'
+        with:
+          username: 'oauth2accesstoken'
+          password: '${{ steps.auth.outputs.access_token }}'
+          registry: '${{ env.AR_REPO_LOCATION }}-docker.pkg.dev'
+
+
+      - name: Extract commit hash
+        id: vars
+        run: echo "::set-output name=hash::$(git rev-parse --short HEAD)"
+
+      - name: Build, tag, and push image to Artifact-registry
+        env:
+            IMAGE_TAG: ${{ steps.vars.outputs.hash }}
+            API_URL: ${{ vars.MAINNET_API_URL_GCP }}
+            NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${{ secrets.NEXT_PUBLIC_RECAPTCHA_SITE_KEY_GCP }}
+            RECAPTCHA_SECRET_KEY: ${{ secrets.RECAPTCHA_SECRET_KEY_GCP }}
+        run: |
+            echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
+            echo "NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY" >> .env.production
+            echo "RECAPTCHA_SECRET_KEY=$RECAPTCHA_SECRET_KEY" >> .env.production
+            cat .env.production
+            docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG .
+            docker push ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG
+            docker tag ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG ${{ env.AR_URL }}/fee-delegation-server:latest
+            docker push ${{ env.AR_URL }}/fee-delegation-server:latest
+

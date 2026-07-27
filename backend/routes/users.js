@@ -4,10 +4,7 @@ const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
 const { requireEditorOrSuperAdmin, requireSuperAdmin } = require('../middleware/auth');
 const { sendAccountCreatedEmail, sendAccountCreatedWithPasswordSetupEmail } = require('../utils/emailService');
-
-function isValidEmail(email) {
-  return typeof email === 'string' && /.+@.+\..+/.test(email);
-}
+const { isValidEmail } = require('../utils/emailValidation');
 
 // GET /api/users
 router.get('/', requireEditorOrSuperAdmin, async (req, res) => {

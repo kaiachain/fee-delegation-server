@@ -1,5 +1,5 @@
 # Use the correct Node.js version as specified in .nvmrc
-FROM node:22.5.1-alpine AS build
+FROM node:22.23.1-alpine AS build
 
 # Set working directory
 WORKDIR /app
@@ -19,7 +19,7 @@ RUN npm run db:generate
 RUN npm run build
 
 # Production stage
-FROM node:22.5.1-alpine AS production
+FROM node:22.23.1-alpine AS production
 
 # Set working directory
 WORKDIR /app

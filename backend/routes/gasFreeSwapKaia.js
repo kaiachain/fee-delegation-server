@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { publicWriteRateLimit } = require('../middleware/feeDelegationRateLimit');
 const { Wallet, TxType, parseKlay } = require('@kaiachain/ethers-ext/v6');
 const { pickHealthyProvider, pickDifferentProvider, isRpcRelatedError } = require('../utils/rpcProvider');
 const {
@@ -124,7 +125,7 @@ const EXPECTED_TOKEN_OUT = (process.env.GASLESS_SWAP_TOKEN_OUT || '').toLowerCas
  *                   status: false
  *                   requestId: "req456def789ghi012"
  */
-router.post('/', async (req, res) => {
+router.post('/', publicWriteRateLimit('gasFreeSwapKaia'), async (req, res) => {
   const requestId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
 
   // // TODO: Remove this block when maintenance is complete
