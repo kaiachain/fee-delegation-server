@@ -2,7 +2,7 @@ name: production-kairos-fee-delegation-CI-GCP
 on:
   push:
     branches:
-      - main
+      - dev
 
 env:
   PROJECT_ID: "kaia-cluster-dev"
