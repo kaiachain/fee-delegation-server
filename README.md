@@ -1,6 +1,8 @@
 # Fee Delegation Server
 
-A combined Next.js and Node.js application for managing fee delegation with authentication and API endpoints.
+A gas fee sponsorship service for the Kaia blockchain: DApps register here and fund a shared fee-payer pool, and this server co-signs their users transactions as the fee payer, so end users transact without holding KAIA for gas.
+
+Built as a combined Next.js and Node.js application — see [Architecture](#architecture) for the technical layout.
 
 ## Project Structure
 
