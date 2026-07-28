@@ -3,6 +3,7 @@ const router = express.Router();
 const v2Router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
+const { publicWriteRateLimit } = require('../middleware/feeDelegationRateLimit');
 const { createResponse, isEnoughBalance, checkWhitelistedAndGetDapp, getDappByApiKey } = require('../utils/apiUtils');
 const { formatKaia } = require('@kaiachain/ethers-ext/v6');
 
@@ -192,7 +193,7 @@ router.options('/', async (req, res) => {
  *               status: false
  */
 // GET /api/balance
-router.get('/', async (req, res) => {
+router.get('/', publicWriteRateLimit('balance'), async (req, res) => {
   try {
     const result = await resolveDappBalance(req, res);
     if (!result) return;
@@ -349,7 +350,7 @@ v2Router.options('/', async (req, res) => {
 });
 
 // GET /api/v2/balance
-v2Router.get('/', async (req, res) => {
+v2Router.get('/', publicWriteRateLimit('balanceV2'), async (req, res) => {
   try {
     const result = await resolveDappBalance(req, res);
     if (!result) return;
