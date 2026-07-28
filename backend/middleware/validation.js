@@ -1,6 +1,8 @@
+const { isValidEmail } = require('../utils/emailValidation');
+
 function validateEmail(req, res, next) {
   const { email } = req.body || {};
-  if (!email || typeof email !== 'string' || !/.+@.+\..+/.test(email)) {
+  if (!isValidEmail(email)) {
     return res.status(400).json({ message: 'Bad request', data: 'Invalid email', error: 'BAD_REQUEST', status: false });
   }
   next();
@@ -19,5 +21,3 @@ module.exports = {
   validateEmail,
   validatePassword,
 };
-
-

@@ -1,5 +1,6 @@
 const { JsonRpcProvider } =  require("@kaiachain/ethers-ext/v6");
 const { prisma } = require('./prisma');
+const { filterSafeRpcUrls, assertRpcUrlSafeForOutbound } = require('./rpcUrlValidation');
 
 // Mutable state: loaded from DB on init and refreshed on add/remove
 let rpcUrls = [];
@@ -31,9 +32,14 @@ const evictProvider = (provider) => {
 
 const HEALTH_CHECK_TIMEOUT_MS = 3000;
 
+function parseEnvRpcUrls(env = process.env) {
+  return (env.RPC_URL || '').split(',').map((u) => u.trim()).filter(Boolean);
+}
+
 /**
  * Load active RPC URLs from the database.
  * Preserves providers for URLs that still exist.
+ * Filters out SSRF-unsafe destinations (sync + DNS resolve-time).
  *
  * Safety for in-flight requests:
  * 1. Pool swap is immediate — new requests never pick the removed provider.
@@ -45,7 +51,8 @@ const HEALTH_CHECK_TIMEOUT_MS = 3000;
 const loadRpcUrls = async () => {
   try {
     const rows = await prisma.rpcUrl.findMany({ where: { active: true }, orderBy: { createdAt: 'asc' } });
-    const newUrls = rows.map(r => r.url);
+    const candidateUrls = rows.map(r => r.url);
+    const newUrls = await filterSafeRpcUrls(candidateUrls);
 
     const oldUrls = rpcUrls;
     const oldPool = providerPool;
@@ -76,18 +83,34 @@ const loadRpcUrls = async () => {
     }
 
     console.log(`RPC provider pool loaded: ${rpcUrls.length} URL(s)`);
+
+    if (rpcUrls.length === 0) {
+      await loadEnvRpcUrlsFallback();
+    }
   } catch (error) {
     console.error('Failed to load RPC URLs from database:', error.message);
     if (rpcUrls.length === 0) {
-      const envUrls = (process.env.RPC_URL || "").split(",").map(u => u.trim()).filter(Boolean);
-      if (envUrls.length > 0) {
-        console.warn('Falling back to RPC_URL env variable');
-        rpcUrls = envUrls;
-        providerPool = new Array(envUrls.length).fill(null);
-      }
+      await loadEnvRpcUrlsFallback();
     }
   }
 };
+
+async function loadEnvRpcUrlsFallback() {
+  const envUrls = parseEnvRpcUrls();
+  if (envUrls.length === 0) {
+    return;
+  }
+
+  const safeEnvUrls = await filterSafeRpcUrls(envUrls);
+  if (safeEnvUrls.length === 0) {
+    console.warn('RPC_URL fallback contained no safe URLs after SSRF filtering');
+    return;
+  }
+
+  console.warn('Falling back to RPC_URL env variable');
+  rpcUrls = safeEnvUrls;
+  providerPool = new Array(safeEnvUrls.length).fill(null);
+}
 
 // Load on module init
 loadRpcUrls();
@@ -129,15 +152,27 @@ const isRpcRelatedError = (error) => {
 /**
  * Ping a URL directly with klay_blockNumber (lowest latency RPC call)
  * without creating a persistent JsonRpcProvider instance.
+ * Does not follow redirects (SSRF: Location could point at private targets).
  */
 const pingUrl = async (url) => {
   try {
+    const safetyError = await assertRpcUrlSafeForOutbound(url);
+    if (safetyError) {
+      return false;
+    }
+
     const result = await Promise.race([
       fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', method: 'klay_blockNumber', params: [], id: 1 }),
-      }).then(r => r.json()),
+        redirect: 'manual',
+      }).then(async (response) => {
+        if (!response.ok || response.status >= 300) {
+          return null;
+        }
+        return response.json();
+      }),
       new Promise((_, reject) =>
         setTimeout(() => reject(new Error('health check timeout')), HEALTH_CHECK_TIMEOUT_MS)
       ),
@@ -260,4 +295,5 @@ module.exports = {
   pingUrl,
   injectTestProvider,
   reinjectTestProvider,
+  parseEnvRpcUrls,
 };

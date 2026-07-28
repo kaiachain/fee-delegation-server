@@ -16,6 +16,7 @@
 
 # testing
 /coverage
+backend/test/.test-meta.json
 
 # next.js
 /.next/

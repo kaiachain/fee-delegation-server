@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const { publicWriteRateLimit } = require('../middleware/feeDelegationRateLimit');
 const { Wallet, parseTransaction, formatKaia } = require('@kaiachain/ethers-ext/v6');
 const { pickHealthyProvider, pickDifferentProvider, isRpcRelatedError } = require('../utils/rpcProvider');
 const { prisma } = require('../utils/prisma');
@@ -181,7 +182,7 @@ router.options('/', async (req, res) => {
  *                   status: false
  *                   requestId: "settle789error123"
  */
-router.post('/', async (req, res) => {
+router.post('/', publicWriteRateLimit('signAsFeePayer'), async (req, res) => {
   const uniqueId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   try {
     const { userSignedTx } = req.body || {};
