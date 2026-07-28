@@ -28,11 +28,13 @@ WORKDIR /app
 COPY package*.json ./
 COPY .env.production ./.env.production
 
-# Install dependencies (prisma generate needs the prisma CLI from
-# devDependencies; Node 22's bundled npm still ships vulnerable tar).
-RUN npm install && npm cache clean --force
+# Production deps only (dev tooling like jest/nodemon/tailwind stays out of
+# the runtime image). Prisma client is copied from the build stage below.
+# Node 22's bundled npm still ships vulnerable tar — remove it after install.
+RUN npm install --omit=dev && npm cache clean --force \
+  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
-# Copy built application
+# Copy built application + generated Prisma client
 COPY --from=build /app/.next ./.next
 COPY --from=build /app/public ./public
 COPY --from=build /app/backend ./backend
@@ -42,11 +44,8 @@ COPY --from=build /app/next.config.ts ./next.config.ts
 COPY --from=build /app/tailwind.config.ts ./tailwind.config.ts
 COPY --from=build /app/postcss.config.mjs ./postcss.config.mjs
 COPY --from=build /app/tsconfig.json ./tsconfig.json
-
-# Generate Prisma client, then drop the base-image npm (and its tar@7.5.11
-# CVE-2026-59873) — runtime only needs node.
-RUN ./node_modules/.bin/prisma generate --schema=./backend/prisma/schema.prisma \
-  && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=build /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 ENV NODE_ENV=production
 
