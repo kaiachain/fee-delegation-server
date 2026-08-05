@@ -42,7 +42,7 @@ COPY .env.production ./.env.production
 #
 # Node 22's bundled npm still ships vulnerable tar — remove it after install,
 # so nothing here may be invoked via npm/npx at runtime. See the migration
-# command in the k8s manifest: it must call the CLI directly, e.g.
+# command in the k8s manifest: it must call the CLI directly, e.g. 
 #   node node_modules/prisma/build/index.js migrate deploy --schema=./backend/prisma/schema.prisma
 RUN npm install --omit=dev \
   && npm install --omit=dev --no-save \
