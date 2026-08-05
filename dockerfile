@@ -30,8 +30,24 @@ COPY .env.production ./.env.production
 
 # Production deps only (dev tooling like jest/nodemon/tailwind stays out of
 # the runtime image). Prisma client is copied from the build stage below.
-# Node 22's bundled npm still ships vulnerable tar — remove it after install.
-RUN npm install --omit=dev && npm cache clean --force \
+#
+# The prisma CLI is a devDependency but the deployment's migration init
+# container needs it at runtime, so install it explicitly here. The version is
+# read from package-lock.json rather than the package.json range, because the
+# CLI and @prisma/client must be the same version and the lock is what pinned
+# the client. --omit=dev keeps the rest of the dev tree out. Installing while
+# npm still exists lets npm resolve the CLI's hoisted dependencies and create
+# node_modules/.bin/prisma; hand-picking COPY lines for that tree is fragile
+# across prisma versions.
+#
+# Node 22's bundled npm still ships vulnerable tar — remove it after install,
+# so nothing here may be invoked via npm/npx at runtime. See the migration
+# command in the k8s manifest: it must call the CLI directly, e.g. 
+#   node node_modules/prisma/build/index.js migrate deploy --schema=./backend/prisma/schema.prisma
+RUN npm install --omit=dev \
+  && npm install --omit=dev --no-save \
+     "prisma@$(node -p 'require("./package-lock.json").packages["node_modules/prisma"].version')" \
+  && npm cache clean --force \
   && rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
 
 # Copy built application + generated Prisma client
