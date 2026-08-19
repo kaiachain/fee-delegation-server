@@ -3,10 +3,10 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse } = require('../utils/apiUtils');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 // POST /api/api-keys
-router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
     const { dappId, name } = req.body;
 
@@ -54,7 +54,7 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // DELETE /api/api-keys
-router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.delete('/', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.body;
 

@@ -25,11 +25,11 @@ function apiOrigin(): string[] {
  *     scripts (self.__next_f.push(...)) whose contents vary per response, so
  *     they cannot be covered by static hashes. Nonces would work but opt every
  *     page out of static rendering.
- *   - style-src: React style={{...}} attributes and reCAPTCHA's injected
- *     styles are style *attributes*, which nonces and hashes never cover.
+ *   - style-src: React style={{...}} attributes are style *attributes*, which
+ *     nonces and hashes never cover.
  *
- * www.google.com / www.gstatic.com are for the reCAPTCHA widget on the login
- * and reset-password pages (script, challenge iframe, and its images).
+ * Google sign-in is a top-level redirect to accounts.google.com, so it needs no
+ * script-src/frame-src allowance here.
  */
 function contentSecurityPolicy(): string {
   const directives: Record<string, string[]> = {
@@ -43,21 +43,14 @@ function contentSecurityPolicy(): string {
       "'unsafe-inline'",
       // next dev's HMR runtime evaluates code at runtime; production does not.
       ...(isDev ? ["'unsafe-eval'"] : []),
-      "https://www.google.com",
-      "https://www.gstatic.com",
     ],
     "style-src": ["'self'", "'unsafe-inline'"],
     // data: covers the inline SVG background patterns used across the pages.
-    "img-src": [
-      "'self'",
-      "data:",
-      "blob:",
-      "https://www.google.com",
-      "https://www.gstatic.com",
-    ],
+    // Google account avatars are served from lh3.googleusercontent.com.
+    "img-src": ["'self'", "data:", "blob:", "https://lh3.googleusercontent.com"],
     "font-src": ["'self'", "data:"],
     "connect-src": ["'self'", ...apiOrigin(), ...(isDev ? ["ws:"] : [])],
-    "frame-src": ["'self'", "https://www.google.com"],
+    "frame-src": ["'self'"],
     "worker-src": ["'self'", "blob:"],
     "manifest-src": ["'self'"],
   };

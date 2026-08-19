@@ -14,12 +14,8 @@ const handle = app.getRequestHandler();
 app.prepare().then(() => {
   const server = express();
 
-  // Handle NextAuth and reCAPTCHA routes with Next.js, before any middleware
+  // Handle NextAuth routes with Next.js, before any middleware
   server.all('/api/auth/*', (req, res) => {
-    return handle(req, res);
-  });
-  
-  server.all('/api/verify-recaptcha', (req, res) => {
     return handle(req, res);
   });
 

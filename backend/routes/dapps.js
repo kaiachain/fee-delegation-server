@@ -8,7 +8,7 @@ const {
   checkContractExistsForNoApiKeyDapps,
   checkSenderExistsForNoApiKeyDapps,
 } = require('../utils/apiUtils');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 
 // GET /api/dapps
@@ -58,13 +58,8 @@ router.get('/', async (req, res) => {
 });
 
 // POST /api/dapps
-router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
-    // Only SUPER_ADMIN can create new DApps
-    if (req.user?.role !== 'super_admin') {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can create DApps");
-    }
-
     const { name, url, balance, terminationDate, contracts, senders, apiKeys, emailAlerts } = req.body;
 
     // Validate required fields
@@ -231,41 +226,18 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // PUT /api/dapps
-router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.put('/', requireSuperAdmin, async (req, res) => {
   try {
 
-    const { id, name, url, balance, terminationDate, active, contracts, senders, apiKeys, emailAlerts, userAccessEmails } = req.body;
+    const { id, name, url, balance, terminationDate, active, contracts, senders, apiKeys, emailAlerts } = req.body;
 
     // Validate required fields
     if (!id) {
       return createResponse(res, "BAD_REQUEST", "DApp ID is required");
     }
 
-    // Authorization check for restricted fields
-    const isSuperAdmin = req.user?.role === 'super_admin';
-    const isEmailBasedEditor = req.user?.role === 'editor' && req.user?.provider === 'credentials';
-    
-    // Restricted fields validation
-    if (userAccessEmails !== undefined && !isSuperAdmin) {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify user access");
-    }
-    
-    if (isEmailBasedEditor && (balance !== undefined || terminationDate !== undefined)) {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify balance or service end date");
-    }
-    
-    // Editor role cannot modify contracts or senders
-    if (!isSuperAdmin && (contracts !== undefined || senders !== undefined)) {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can modify contracts or sender addresses");
-    }
-    
-    // Only SUPER_ADMIN can activate/deactivate DApps
-    if (active !== undefined && !isSuperAdmin) {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can activate or deactivate DApps");
-    }
-
     // Check if this is a simple update (just basic fields) or full update
-    const isFullUpdate = contracts !== undefined || senders !== undefined || apiKeys !== undefined || emailAlerts !== undefined || userAccessEmails !== undefined;
+    const isFullUpdate = contracts !== undefined || senders !== undefined || apiKeys !== undefined || emailAlerts !== undefined;
 
     if (isFullUpdate) {
       // Full update with nested data
@@ -327,25 +299,6 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
         }
       }
 
-      // Validate userAccessEmails if provided
-      if (userAccessEmails !== undefined) {
-        const userAccessEmailsArray = Array.isArray(userAccessEmails) ? userAccessEmails : [];
-        const invalidEmails = [];
-        
-        for (const email of userAccessEmailsArray) {
-          const user = await prisma.user.findUnique({ 
-            where: { email, isActive: true } 
-          });
-          if (!user) {
-            invalidEmails.push(email);
-          }
-        }
-        
-        if (invalidEmails.length > 0) {
-          return createResponse(res, "BAD_REQUEST", `Invalid or inactive user emails: ${invalidEmails.join(', ')}`);
-        }
-      }
-
       try {
         // Use transaction to update everything atomically
         const result = await prisma.$transaction(async (tx) => {
@@ -360,10 +313,6 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
           const existingSenders = await tx.sender.findMany({ where: { dappId: id } });
           const existingApiKeys = await tx.apiKey.findMany({ where: { dappId: id } });
           const existingEmailAlerts = await tx.emailAlert.findMany({ where: { dappId: id } });
-          const existingUserAccess = await tx.userDappAccess.findMany({ 
-            where: { dappId: id },
-            include: { user: { select: { email: true } } }
-          });
 
           // Smart contract updates
           if (contracts !== undefined) {
@@ -385,11 +334,6 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
             await updateEmailAlerts(tx, id, existingEmailAlerts, emailAlerts);
           }
 
-          // Smart user access updates
-          if (userAccessEmails !== undefined) {
-            await updateUserAccess(tx, id, existingUserAccess, userAccessEmails);
-          }
-
           return updatedDapp;
         });
       } catch (error) {
@@ -405,13 +349,6 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
           senders: true,
           apiKeys: true,
           emailAlerts: true,
-          userAccess: {
-            include: { 
-              user: { 
-                select: { id: true, email: true, firstName: true, lastName: true, isActive: true } 
-              } 
-            }
-          },
         },
       });
 
@@ -420,8 +357,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
         emailAlerts: completeDapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
-        })) || [],
-        assignedUsers: completeDapp.userAccess?.map((access) => access.user) || []
+        })) || []
       });
 
     } else {
@@ -471,13 +407,6 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
           senders: true,
           apiKeys: true,
           emailAlerts: true,
-          userAccess: {
-            include: { 
-              user: { 
-                select: { id: true, email: true, firstName: true, lastName: true, isActive: true } 
-              } 
-            }
-          },
         },
       });
 
@@ -486,8 +415,7 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
         emailAlerts: dapp.emailAlerts?.map((alert) => ({
           ...alert,
           balanceThreshold: alert.balanceThreshold
-        })) || [],
-        assignedUsers: dapp.userAccess?.map((access) => access.user) || []
+        })) || []
       });
     }
 
@@ -506,13 +434,8 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // DELETE /api/dapps
-router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.delete('/', requireSuperAdmin, async (req, res) => {
   try {
-    // Only SUPER_ADMIN can delete DApps
-    if (req.user?.role !== 'super_admin') {
-      return createResponse(res, "UNAUTHORIZED", "Only Super Admin can delete DApps");
-    }
-
     const { id } = req.body;
 
     await prisma.dApp.delete({
@@ -529,7 +452,7 @@ router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // GET /api/dapps/management
-router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
+router.get('/management', requireSuperAdmin, async (req, res) => {
   try {
 
     const dapps = await prisma.dApp.findMany({
@@ -582,19 +505,6 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
             createdAt: true
           }
         },
-        userAccess: {
-          include: {
-            user: {
-              select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-                isActive: true
-              }
-            }
-          }
-        }
       }
     });
 
@@ -613,7 +523,6 @@ router.get('/management', requireEditorOrSuperAdmin, async (req, res) => {
           ...alert,
           balanceThreshold: alert.balanceThreshold
         })) || [],
-        assignedUsers: dapp.userAccess?.map((access) => access.user) || [],
         contractUsages: dapp.contractUsages?.map((usage) => ({
           contractAddress: usage.contractAddress,
           totalUsed: usage.totalUsed?.toString?.() ?? usage.totalUsed,
@@ -831,42 +740,6 @@ const updateApiKeys = async (tx, dappId, existingApiKeys, newApiKeys) => {
         }
       });
       createdCount++;
-    }
-  }
-};
-
-const updateUserAccess = async (tx, dappId, existingUserAccess, targetEmails) => {
-  const existingEmails = new Set(existingUserAccess.map(access => access.user.email));
-  const targetEmailsSet = new Set(targetEmails);
-  
-  // Remove access for users not in target list
-  const toRemove = existingUserAccess.filter(access => !targetEmailsSet.has(access.user.email));
-  if (toRemove.length > 0) {
-    await tx.userDappAccess.deleteMany({
-      where: { id: { in: toRemove.map(access => access.id) } }
-    });
-  }
-  
-  let createdCount = 0;
-  
-  // Add access for new users
-  for (const email of targetEmails) {
-    if (!existingEmails.has(email)) {
-      // Get user ID for this email
-      const user = await tx.user.findUnique({ 
-        where: { email, isActive: true },
-        select: { id: true }
-      });
-      
-      if (user) {
-        await tx.userDappAccess.create({
-          data: {
-            userId: user.id,
-            dappId: dappId,
-          }
-        });
-        createdCount++;
-      }
     }
   }
 };

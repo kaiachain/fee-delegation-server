@@ -1,25 +1,13 @@
 const { createTestAgent } = require('./helpers/app');
 const { prisma } = require('../utils/prisma');
-const { signEmailJwt } = require('../utils/passwordUtils');
 
-async function createTestUser(overrides = {}) {
-  return prisma.user.create({
-    data: {
-      email: 'admin@test.com',
-      firstName: 'Super',
-      lastName: 'Admin',
-      role: 'SUPER_ADMIN',
-      isActive: true,
-      createdBy: 'test',
-      ...overrides,
-    },
-  });
-}
+// Auth is Google-only: stand in for a whitelisted Google ID token.
+jest.mock('../utils/verifyToken', () => ({
+  verify: jest.fn(async () => ({ email: 'admin@test.com', role: 'super_admin' })),
+}));
 
-function superAdminAuthHeader(user) {
-  const role = (user.role || 'SUPER_ADMIN').toString().toLowerCase();
-  const token = signEmailJwt({ sub: user.id, email: user.email, role });
-  return { Authorization: `Bearer ${token}` };
+function superAdminAuthHeader() {
+  return { Authorization: 'Bearer google-id-token' };
 }
 
 describe('RPC URL SSRF validation (unit)', () => {
@@ -140,19 +128,15 @@ describe('pingUrl redirect policy', () => {
 });
 
 describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
-  let superAdmin;
-
   beforeEach(async () => {
     await prisma.rpcUrl.deleteMany();
-    await prisma.user.deleteMany();
-    superAdmin = await createTestUser();
   });
 
   it('POST /api/rpc-urls rejects private targets on create', async () => {
     const agent = createTestAgent();
     const res = await agent
       .post('/api/rpc-urls')
-      .set(superAdminAuthHeader(superAdmin))
+      .set(superAdminAuthHeader())
       .send({ url: 'http://127.0.0.1:8545' });
 
     expect(res.status).toBe(400);
@@ -164,7 +148,7 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
     const agent = createTestAgent();
     const res = await agent
       .post('/api/rpc-urls')
-      .set(superAdminAuthHeader(superAdmin))
+      .set(superAdminAuthHeader())
       .send({ url: 'file:///etc/passwd' });
 
     expect(res.status).toBe(400);
@@ -176,7 +160,7 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
     const agent = createTestAgent();
     const res = await agent
       .post('/api/rpc-urls')
-      .set(superAdminAuthHeader(superAdmin))
+      .set(superAdminAuthHeader())
       .send({ url: 'https://example.com/rpc' });
 
     expect(res.status).toBe(200);
@@ -192,7 +176,7 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
     const agent = createTestAgent();
     const res = await agent
       .post(`/api/rpc-urls/${stored.id}/ping`)
-      .set(superAdminAuthHeader(superAdmin));
+      .set(superAdminAuthHeader());
 
     expect(res.status).toBe(400);
     expect(res.body.error).toBe('BAD_REQUEST');
@@ -207,7 +191,7 @@ describe('RPC URL SSRF validation (HTTP, Super Admin)', () => {
     const agent = createTestAgent();
     const res = await agent
       .post(`/api/rpc-urls/${stored.id}/ping`)
-      .set(superAdminAuthHeader(superAdmin));
+      .set(superAdminAuthHeader());
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe(true);

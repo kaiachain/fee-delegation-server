@@ -48,13 +48,8 @@ jobs:
         env:
             IMAGE_TAG: ${{ steps.vars.outputs.hash }}
             API_URL: ${{ vars.KAIROS_API_URL_GCP }}
-            NEXT_PUBLIC_RECAPTCHA_SITE_KEY: ${{ secrets.NEXT_PUBLIC_RECAPTCHA_SITE_KEY_GCP }}
         run: |
-            # Only build-time NEXT_PUBLIC_* values go into the image. Runtime
-            # secrets (RECAPTCHA_SECRET_KEY etc.) are injected by ESO from GSM
-            # (fee-delegation-server-dev) — never bake them into image layers.
             echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
-            echo "NEXT_PUBLIC_RECAPTCHA_SITE_KEY=$NEXT_PUBLIC_RECAPTCHA_SITE_KEY" >> .env.production
             docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG .
             docker push ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG
             docker tag ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG ${{ env.AR_URL }}/fee-delegation-server:latest
