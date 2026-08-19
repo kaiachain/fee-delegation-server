@@ -163,19 +163,6 @@ export default function NavBar() {
                 <>
                   <Link
                     className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
-                      pathname === '/users'
-                        ? 'text-white bg-gray-700/50'
-                        : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
-                    }`}
-                    href="/users"
-                    title="Users"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-                    </svg>
-                  </Link>
-                  <Link
-                    className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
                       pathname === '/rpc-urls'
                         ? 'text-white bg-gray-700/50'
                         : 'text-gray-300 hover:text-white hover:bg-gray-700/50'
@@ -189,7 +176,7 @@ export default function NavBar() {
                   </Link>
                 </>
               )}
-              {status === "authenticated" && (session?.user?.role === "editor" || session?.user?.role === "super_admin") && (
+              {status === "authenticated" && session?.user?.role === "super_admin" && (
                 <>
                   <Link
                     className={`p-2 rounded-lg text-sm font-medium transition-all duration-200 flex items-center justify-center ${
@@ -296,14 +283,6 @@ export default function NavBar() {
                       className={`absolute right-0 mt-2 w-48 rounded-lg shadow-lg py-1 bg-white ring-1 ring-black ring-opacity-5 transform transition-all duration-200 ease-out
                         ${isVisible ? "opacity-100 scale-100" : "opacity-0 scale-95 pointer-events-none"}`}
                     >
-                      {session?.user?.role !== 'super_admin' && (
-                        <a
-                          href="/auth/reset-password"
-                          className="w-full block px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"
-                        >
-                          Change password
-                        </a>
-                      )}
                       <button
                         onClick={handleSignOut}
                         className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 transition-colors duration-200"

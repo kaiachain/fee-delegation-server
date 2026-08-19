@@ -1,9 +1,26 @@
 import GoogleProvider from "next-auth/providers/google";
-import CredentialsProvider from "next-auth/providers/credentials";
 import { JWT } from "next-auth/jwt";
 import { Session } from "next-auth";
-import jwt from "jsonwebtoken";
-import { isGoogleWhitelistEmail } from "../backend/utils/googleWhitelist";
+import { isGoogleWhitelistEmail, isAllowedHostedDomain } from "../backend/utils/googleWhitelist";
+
+/**
+ * Read a claim out of a Google ID token without verifying it.
+ *
+ * This is only used to gate what the UI renders. The Express API independently
+ * verifies the same token (signature, audience, email_verified, hd, whitelist)
+ * on every request, so nothing here is a security boundary — but reading `hd`
+ * from the token itself keeps this gate consistent with the one the API applies.
+ */
+function idTokenClaim(idToken: string | undefined, claim: string): unknown {
+  if (!idToken) return undefined;
+  const payload = idToken.split(".")[1];
+  if (!payload) return undefined;
+  try {
+    return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))[claim];
+  } catch {
+    return undefined;
+  }
+}
 
 export const authOptions = {
   providers: [
@@ -11,78 +28,31 @@ export const authOptions = {
       clientId: process.env.GOOGLE_CLIENT_ID!,
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
-    CredentialsProvider({
-      name: "Email",
-      credentials: {
-        email: { label: "Email", type: "text" },
-        password: { label: "Password", type: "password" },
-      },
-      async authorize(credentials) {
-        try {
-          const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3000/api";
-          const res = await fetch(`${API_URL}/email-auth/login`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ email: credentials?.email, password: credentials?.password }),
-          });
-          const data = await res.json();
-          if (!res.ok || !data?.status) {
-            return null;
-          }
-          const token = data?.data?.token as string;
-          const role = (data?.data?.role as string) || "viewer";
-          const decoded: any = jwt.decode(token) || {};
-          const exp = typeof decoded?.exp === "number" ? decoded.exp : undefined;
-          return {
-            id: data?.data?.email || credentials?.email || "",
-            email: data?.data?.email || credentials?.email || "",
-            role,
-            emailJwt: token,
-            emailTokenExpiresAt: exp,
-            provider: "credentials",
-          } as any;
-        } catch {
-          return null;
-        }
-      },
-    }),
   ],
   callbacks: {
     async signIn({ user, account }: { user: any; account: any }) {
-      // Additional restriction for Google sign-in to whitelist only
-      if (account?.provider === "google") {
-        const email = (user?.email as string) || "";
-        if (!isGoogleWhitelistEmail(email)) {
-          // Block unauthorized Google sign-ins
-          throw new Error("Access denied: Email not in whitelist");
-        }
-        return true;
+      // Google sign-in is restricted to the whitelist...
+      const email = (user?.email as string) || "";
+      if (!isGoogleWhitelistEmail(email)) {
+        throw new Error("Access denied: Email not in whitelist");
       }
-      // Allow credentials (email/password) sign-in
+      // ...and to the allowed Google Workspace domain(s).
+      const hd = idTokenClaim(account?.id_token, "hd") as string | undefined;
+      if (!isAllowedHostedDomain(hd)) {
+        throw new Error("Access denied: Google Workspace domain not allowed");
+      }
       return true;
     },
-    async jwt({ token, account, user }: { token: JWT; account: { id?: string; access_token?: string; id_token?: string; expires_at?: number, provider?: string; emailJwt?: string; emailTokenExpiresAt?: number; user?: any } | null, user?: any }) {
+    async jwt({ token, account }: { token: JWT; account: { id?: string; access_token?: string; id_token?: string; expires_at?: number } | null }) {
       if (account) {
         token.userId = account.id as string;
         token.accessToken = account.access_token;
-        token.idToken = account.provider === "credentials" ? user.emailJwt : account.id_token;
-        token.expiresAt = account.provider === "credentials" ? user.emailTokenExpiresAt : account.expires_at;
-        token.role = account.provider === "credentials" ? user?.role : undefined;
-        token.provider = account.provider;
+        // The Google ID token is what the backend API verifies
+        token.idToken = account.id_token;
+        token.expiresAt = account.expires_at;
+        (token as any).hd = idTokenClaim(account.id_token, "hd");
 
-        return { ...token,  sessionExpired: false };
-      }
-      // Persist credentials provider data into the token on sign-in
-      if ((user as any)?.provider === "credentials") {
-        const u = user as any;
-        // @ts-ignore
-        (token as any).role = (u.role as string) || "viewer";
-        if (u.emailJwt) {
-          token.idToken = u.emailJwt as string;
-        }
-        if (u.emailTokenExpiresAt) {
-          token.expiresAt = u.emailTokenExpiresAt as number;
-        }
+        return { ...token, sessionExpired: false };
       }
       return token;
     },
@@ -98,19 +68,14 @@ export const authOptions = {
       session.idToken = (token as any).idToken as string;
       session.idTokenExpires = (token as any).expiresAt as number;
 
-      // Provider information
-      session.user.provider = (token as any).provider as string;
+      session.user.provider = "google";
 
-      // Role resolution
-      const tokenRole = (token as any).role as string | undefined;
-      if (tokenRole) {
-        session.user.role = tokenRole as "editor" | "viewer" | "super_admin";
-      } else {
-        // Fallback: Google whitelist -> super_admin, else viewer
-        session.user.role = isGoogleWhitelistEmail(session.user.email || "")
-          ? "super_admin"
-          : "viewer";
-      }
+      // Admin requires both the whitelist and the allowed Workspace domain,
+      // matching what the API enforces. "viewer" means no access anywhere.
+      const isAdmin =
+        isGoogleWhitelistEmail(session.user.email || "") &&
+        isAllowedHostedDomain((token as any).hd as string | undefined);
+      session.user.role = isAdmin ? "super_admin" : "viewer";
 
       // Compute sessionExpired using idTokenExpires
       const expiresMs = typeof session.idTokenExpires === "number" ? session.idTokenExpires * 1000 : 0;
@@ -118,7 +83,7 @@ export const authOptions = {
       return session;
     },
   },
-  secret: process.env.NEXTAUTH_SECRET || "fallback-secret-for-development",
+  secret: process.env.NEXTAUTH_SECRET,
   debug: process.env.NODE_ENV === 'development',
   // Add these options to improve compatibility
   session: {
@@ -136,4 +101,4 @@ export const authOptions = {
       // Clean up any necessary resources
     },
   },
-}; 
+};

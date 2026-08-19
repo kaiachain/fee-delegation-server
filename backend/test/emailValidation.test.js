@@ -1,4 +1,3 @@
-const { createTestAgent } = require('./helpers/app');
 const { withEnv } = require('./helpers/env');
 
 describe('email validation', () => {
@@ -34,50 +33,6 @@ describe('email validation', () => {
     });
   });
 
-  describe('POST /api/email-auth/login (HTTP)', () => {
-    it('rejects overlong email quickly via middleware', async () => {
-      const agent = createTestAgent();
-      const longEmail = `${'x'.repeat(300)}@example.com`;
-
-      const start = Date.now();
-      const res = await agent
-        .post('/api/email-auth/login')
-        .send({ email: longEmail, password: 'password123' });
-      const elapsed = Date.now() - start;
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('BAD_REQUEST');
-      expect(elapsed).toBeLessThan(200);
-    });
-
-    it('still accepts a normal-length email through validation middleware', async () => {
-      const agent = createTestAgent();
-      const res = await agent
-        .post('/api/email-auth/reset-password')
-        .send({ email: 'nobody@example.com' });
-
-      // Unknown user => success without leak, not invalid email format.
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe(true);
-    });
-  });
-
-  describe('POST /api/email-auth/reset-password (HTTP)', () => {
-    it('rejects overlong email quickly', async () => {
-      const agent = createTestAgent();
-      const longEmail = `${'x'.repeat(300)}@example.com`;
-
-      const start = Date.now();
-      const res = await agent
-        .post('/api/email-auth/reset-password')
-        .send({ email: longEmail });
-      const elapsed = Date.now() - start;
-
-      expect(res.status).toBe(400);
-      expect(res.body.error).toBe('BAD_REQUEST');
-      expect(elapsed).toBeLessThan(200);
-    });
-  });
 });
 
 describe('GOOGLE_WHITELIST trim', () => {
@@ -95,6 +50,75 @@ describe('GOOGLE_WHITELIST trim', () => {
       const { isGoogleWhitelistEmail } = require('../utils/googleWhitelist');
       expect(isGoogleWhitelistEmail('admin@example.com')).toBe(true);
       expect(isGoogleWhitelistEmail('other@example.com')).toBe(false);
+    });
+  });
+});
+
+describe('GOOGLE_ALLOWED_HD hosted-domain enforcement', () => {
+  const { isAllowedHostedDomain } = require('../utils/googleWhitelist');
+
+  it('defaults to kaia.io when GOOGLE_ALLOWED_HD is unset or blank', () => {
+    for (const unset of [undefined, '', '  ,  ']) {
+      expect(isAllowedHostedDomain('kaia.io', unset)).toBe(true);
+      expect(isAllowedHostedDomain('evil.com', unset)).toBe(false);
+      // A missing env var must not widen access to consumer accounts.
+      expect(isAllowedHostedDomain(undefined, unset)).toBe(false);
+    }
+  });
+
+  it("only '*' disables the check", () => {
+    expect(isAllowedHostedDomain('evil.com', '*')).toBe(true);
+    expect(isAllowedHostedDomain(undefined, '*')).toBe(true);
+    expect(isAllowedHostedDomain(undefined, 'kaia.io,*')).toBe(true);
+  });
+
+  it('an explicit list replaces the kaia.io default', () => {
+    expect(isAllowedHostedDomain('other.com', 'other.com')).toBe(true);
+    expect(isAllowedHostedDomain('kaia.io', 'other.com')).toBe(false);
+  });
+
+  it('accepts a matching hosted domain when configured', () => {
+    expect(isAllowedHostedDomain('kaia.io', 'kaia.io')).toBe(true);
+    expect(isAllowedHostedDomain('kaia.io', ' kaia.io , krustuniverse.com ')).toBe(true);
+    expect(isAllowedHostedDomain('krustuniverse.com', 'kaia.io,krustuniverse.com')).toBe(true);
+  });
+
+  it('is case-insensitive on both sides', () => {
+    expect(isAllowedHostedDomain('KAIA.IO', 'kaia.io')).toBe(true);
+    expect(isAllowedHostedDomain('kaia.io', 'KAIA.IO')).toBe(true);
+  });
+
+  it('denies a non-matching hosted domain', () => {
+    expect(isAllowedHostedDomain('evil.com', 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain('kaia.io.evil.com', 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain('xkaia.io', 'kaia.io')).toBe(false);
+  });
+
+  it('denies consumer accounts (no hd claim) once configured', () => {
+    expect(isAllowedHostedDomain(undefined, 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain(null, 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain('', 'kaia.io')).toBe(false);
+  });
+
+  it('denies non-string hd claims', () => {
+    expect(isAllowedHostedDomain(['kaia.io'], 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain({ hd: 'kaia.io' }, 'kaia.io')).toBe(false);
+    expect(isAllowedHostedDomain(true, 'kaia.io')).toBe(false);
+  });
+
+  it('reads GOOGLE_ALLOWED_HD from the environment', async () => {
+    await withEnv({ GOOGLE_ALLOWED_HD: 'other.com' }, async () => {
+      expect(isAllowedHostedDomain('other.com')).toBe(true);
+      expect(isAllowedHostedDomain('kaia.io')).toBe(false);
+      expect(isAllowedHostedDomain(undefined)).toBe(false);
+    });
+  });
+
+  it('enforces the kaia.io default when the env var is absent', async () => {
+    await withEnv({ GOOGLE_ALLOWED_HD: undefined }, async () => {
+      expect(isAllowedHostedDomain('kaia.io')).toBe(true);
+      expect(isAllowedHostedDomain('evil.com')).toBe(false);
+      expect(isAllowedHostedDomain(undefined)).toBe(false);
     });
   });
 });

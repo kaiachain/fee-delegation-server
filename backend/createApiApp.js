@@ -64,8 +64,6 @@ function mountApiRoutes(server) {
   server.use('/api/openapi.json', openapiRoutes);
   server.use('/api/signAsFeePayer', signAsFeePayerRoutes);
   server.use('/api/gasFreeSwapKaia', gasFreeSwapKaiaRoutes);
-  server.use('/api/email-auth', require('./routes/emailAuth'));
-  server.use('/api/users', require('./routes/users'));
   server.use('/api/rpc-urls', require('./routes/rpcUrls'));
 }
 

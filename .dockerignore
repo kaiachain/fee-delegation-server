@@ -1,0 +1,14 @@
+# Never let local secrets or VCS metadata enter the build context.
+# CI generates .env.production in the workspace, so it is explicitly re-included.
+.env
+.env.*
+!.env.production
+
+.git
+.github
+node_modules
+.next
+coverage
+backend/test/.test-meta.json
+*.pem
+npm-debug.log*

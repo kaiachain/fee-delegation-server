@@ -28,30 +28,7 @@ export default function Management() {
       return [];
     }
     
-    // Filter DApps based on user access level
-    let filteredDapps = result.data;
-    if (session?.user) {
-      const userRole = session.user.role;
-      const userEmail = session.user.email;
-      
-      if (userRole === 'super_admin') {
-        // Super Admin: All DApps
-        filteredDapps = result.data;
-      } else if (userRole === 'editor' && session.user.provider === 'google') {
-        // Editor (Google): All DApps (existing behavior)
-        filteredDapps = result.data;
-      } else if (userRole === 'editor' && session.user.provider !== 'google') {
-        // Editor (Email): Only assigned DApps
-        filteredDapps = result.data.filter((dapp: any) => 
-          dapp.assignedUsers?.some((user: any) => user.email === userEmail)
-        );
-      } else {
-        // Viewer or other roles: empty list
-        filteredDapps = [];
-      }
-    }
-    
-    return filteredDapps;
+    return session?.user?.role === 'super_admin' ? result.data : [];
   };
 
   useEffect(() => {
@@ -69,7 +46,7 @@ export default function Management() {
       return;
     }
 
-    if (session?.user.role !== "editor" && session?.user.role !== "super_admin") {
+    if (session?.user.role !== "super_admin") {
       setIsLoading(false);
       return;
     }
@@ -127,7 +104,7 @@ export default function Management() {
     );
   }
 
-  if (!session || session?.sessionExpired || (session?.user.role !== "editor" && session?.user.role !== "super_admin")) {
+  if (!session || session?.sessionExpired || session?.user.role !== "super_admin") {
     return (
       <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 pt-24 pb-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">

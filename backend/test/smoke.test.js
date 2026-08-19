@@ -20,9 +20,9 @@ describe('HTTP integration harness', () => {
     expect(Array.isArray(res.body.data)).toBe(true);
   });
 
-  it('GET /api/users without auth returns 401', async () => {
+  it('GET /api/pool without auth returns 401', async () => {
     const agent = createTestAgent();
-    const res = await agent.get('/api/users');
+    const res = await agent.get('/api/pool');
 
     expect(res.status).toBe(401);
     expect(res.body.error).toBe('UNAUTHORIZED');

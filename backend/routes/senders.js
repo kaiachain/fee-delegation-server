@@ -3,10 +3,10 @@ const router = express.Router();
 const { ethers } = require('ethers');
 const { prisma } = require('../utils/prisma');
 const { createResponse, checkDappHasApiKeys, checkSenderExistsForNoApiKeyDapps, checkSenderExistsForApiKeyDapps } = require('../utils/apiUtils');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 // POST /api/senders/check
-router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/check', requireSuperAdmin, async (req, res) => {
   try {
     const { address } = req.body;
 
@@ -30,7 +30,7 @@ router.post('/check', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // POST /api/senders
-router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
     const isSuperAdmin = req.user?.role === 'super_admin';
 
@@ -82,7 +82,7 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // DELETE /api/senders
-router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.delete('/', requireSuperAdmin, async (req, res) => {
   try {
     const isSuperAdmin = req.user?.role === 'super_admin';
 

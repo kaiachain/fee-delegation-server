@@ -1,22 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { prisma } = require('../utils/prisma');
-const { createResponse, applyDappAccessFilter, validateEmailAlertAccess } = require('../utils/apiUtils');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { createResponse } = require('../utils/apiUtils');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 // GET /api/email-alerts
-router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.get('/', requireSuperAdmin, async (req, res) => {
   try {
-    const userRole = req.user?.role;
-    const userEmail = req.user?.email;
-    
-    let whereClause = {};
-    
-    // Apply DApp access filtering
-    whereClause = await applyDappAccessFilter(whereClause, userRole, userEmail);
-
     const emailAlerts = await prisma.emailAlert.findMany({
-      where: whereClause,
       include: {
         dapp: {
           select: {
@@ -34,31 +25,12 @@ router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // POST /api/email-alerts
-router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.post('/', requireSuperAdmin, async (req, res) => {
   try {
     const { dappId, email, balanceThreshold, isActive } = req.body;
-    const userRole = req.user?.role;
-    const userEmail = req.user?.email;
 
     if (!dappId || !email || balanceThreshold === undefined || isActive === undefined) {
       return createResponse(res, "BAD_REQUEST", "Missing required fields: dappId, email, balanceThreshold, isActive");
-    }
-
-    // Check if user has access to this DApp
-    if (userRole !== 'super_admin') {
-      const userAccess = await prisma.userDappAccess.findFirst({
-        where: {
-          dappId,
-          user: {
-            email: userEmail,
-            isActive: true
-          }
-        }
-      });
-      
-      if (!userAccess) {
-        return createResponse(res, "UNAUTHORIZED", "You don't have access to this DApp");
-      }
     }
 
     const newEmailAlert = await prisma.emailAlert.create({
@@ -78,21 +50,17 @@ router.post('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // PUT /api/email-alerts
-router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.put('/', requireSuperAdmin, async (req, res) => {
   try {
     const { id, email, balanceThreshold, isActive } = req.body;
-    const userRole = req.user?.role;
-    const userEmail = req.user?.email;
 
     if (!id) {
       return createResponse(res, "BAD_REQUEST", "Missing required fields: id");
     }
 
-    // Validate user access to this email alert
-    const accessValidation = await validateEmailAlertAccess(id, userRole, userEmail);
-    if (!accessValidation.success) {
-      const errorType = accessValidation.error === "Email alert not found" ? "BAD_REQUEST" : "UNAUTHORIZED";
-      return createResponse(res, errorType, accessValidation.error);
+    const existing = await prisma.emailAlert.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return createResponse(res, "BAD_REQUEST", "Email alert not found");
     }
 
     const updateData = {};
@@ -113,21 +81,17 @@ router.put('/', requireEditorOrSuperAdmin, async (req, res) => {
 });
 
 // DELETE /api/email-alerts
-router.delete('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.delete('/', requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.body;
-    const userRole = req.user?.role;
-    const userEmail = req.user?.email;
 
     if (!id) {
       return createResponse(res, "BAD_REQUEST", "Missing required fields: id");
     }
 
-    // Validate user access to this email alert
-    const accessValidation = await validateEmailAlertAccess(id, userRole, userEmail);
-    if (!accessValidation.success) {
-      const errorType = accessValidation.error === "Email alert not found" ? "BAD_REQUEST" : "UNAUTHORIZED";
-      return createResponse(res, errorType, accessValidation.error);
+    const existing = await prisma.emailAlert.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return createResponse(res, "BAD_REQUEST", "Email alert not found");
     }
 
     await prisma.emailAlert.delete({

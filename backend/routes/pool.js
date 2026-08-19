@@ -2,10 +2,10 @@ const express = require('express');
 const router = express.Router();
 const { createResponse, logError, getCleanErrorMessage } = require('../utils/apiUtils');
 const { pickHealthyProvider } = require('../utils/rpcProvider');
-const { requireEditorOrSuperAdmin } = require('../middleware/auth');
+const { requireSuperAdmin } = require('../middleware/auth');
 
 // GET /api/pool
-router.get('/', requireEditorOrSuperAdmin, async (req, res) => {
+router.get('/', requireSuperAdmin, async (req, res) => {
   const requestId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   try {
     const provider = await pickHealthyProvider(requestId);
