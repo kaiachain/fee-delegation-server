@@ -44,13 +44,43 @@ jobs:
         id: vars
         run: echo "::set-output name=hash::$(git rev-parse --short HEAD)"
 
-      - name: Build, tag, and push image to Artifact-registry
+      - name: Build image
         env:
             IMAGE_TAG: ${{ steps.vars.outputs.hash }}
             API_URL: ${{ vars.KAIROS_API_URL_GCP }}
         run: |
             echo "NEXT_PUBLIC_API_URL= $API_URL" > .env.production
             docker build  -f dockerfile --build-arg VERSION=$IMAGE_TAG -t ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG .
+
+      # Gate: the image is not pushed if it has a fixable CRITICAL finding.
+      # HIGH findings are listed in the log; pull requests are gated on them
+      # by the security-scan workflow.
+      - name: Trivy scan (report HIGH and CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.AR_URL }}/fee-delegation-server:${{ steps.vars.outputs.hash }}
+          scanners: vuln
+          severity: CRITICAL,HIGH
+          format: table
+          exit-code: "0"
+
+      - name: Trivy scan (fail on fixable CRITICAL)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: v0.76.2
+          image-ref: ${{ env.AR_URL }}/fee-delegation-server:${{ steps.vars.outputs.hash }}
+          scanners: vuln
+          severity: CRITICAL
+          ignore-unfixed: true
+          format: table
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      - name: Tag and push image to Artifact-registry
+        env:
+            IMAGE_TAG: ${{ steps.vars.outputs.hash }}
+        run: |
             docker push ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG
             docker tag ${{ env.AR_URL }}/fee-delegation-server:$IMAGE_TAG ${{ env.AR_URL }}/fee-delegation-server:latest
             docker push ${{ env.AR_URL }}/fee-delegation-server:latest
